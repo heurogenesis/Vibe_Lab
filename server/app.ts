@@ -1,0 +1,76 @@
+import express from 'express';
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
+import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
+import { z } from 'zod';
+import { profileSchema, type Assignment, type PublicAssignment, type QuizResult, type Submission } from '../shared/schema.js';
+import { createAssignment } from './curriculum.js';
+import { ApiError, GitHubClient, parseRepositoryUrl, repositoryNameSchema } from './github.js';
+import { LearningAI } from './ai.js';
+import type { Store } from './store.js';
+function publicAssignment(a: Assignment): PublicAssignment { return { ...a, quiz: a.quiz.map(({ question, options }) => ({ question, options })) }; }
+function findAssignment(assignments: Assignment[], id: string | string[]) { const target = z.string().parse(id); const a = assignments.find(a => a.id === target); if (!a) throw new ApiError(404, '과제를 찾을 수 없습니다.'); return a; }
+export function createApp(store: Store, ai: LearningAI, github: GitHubClient, options: { port?: number; githubAuthenticated?: boolean } = {}) {
+  const app = express(); app.disable('x-powered-by');
+  app.use(helmet({ contentSecurityPolicy: { directives: { 'font-src': ["'self'", 'https://fonts.gstatic.com'], 'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'], 'upgrade-insecure-requests': null } } }));
+  app.use('/api', (req, res, next) => {
+    const host = req.hostname;
+    if (!['127.0.0.1', 'localhost', '[::1]', '::1'].includes(host)) return res.status(403).json({ error: '로컬 접속만 허용됩니다.' });
+    const origin = req.get('origin');
+    const allowed = ['http://127.0.0.1:5173', 'http://localhost:5173', `http://127.0.0.1:${options.port || 3001}`, `http://localhost:${options.port || 3001}`];
+    if (origin && !allowed.includes(origin)) return res.status(403).json({ error: '허용되지 않은 요청 출처입니다.' });
+    if (!['GET', 'HEAD'].includes(req.method) && req.get('X-Vibe-Lab') !== '1') return res.status(403).json({ error: '요청 검증 헤더가 필요합니다.' });
+    res.set('Cache-Control', 'no-store'); next();
+  });
+  app.use('/api', rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.' } }));
+  app.use(express.json({ limit: '64kb' }));
+  const expensive = rateLimit({ windowMs: 60_000, limit: 12, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: 'AI 요청이 많습니다. 1분 후 다시 시도해 주세요.' } });
+  app.get('/api/health', async (_req, res) => { await store.read(); res.json({ storage: store.mode, ai: ai.enabled, githubAuthenticated: !!options.githubAuthenticated, localOnly: true }); });
+  app.get('/api/state', async (_req, res) => { const state = await store.read(); res.json({ ...state, assignments: state.assignments.map(publicAssignment) }); });
+  app.put('/api/profile', async (req, res) => { const profile = profileSchema.parse(req.body); await store.update(state => { state.profile = profile; }); res.json(profile); });
+  app.post('/api/assignments', expensive, async (_req, res) => {
+    const state = await store.read(); if (!state.profile) throw new ApiError(400, '학습 프로필을 먼저 저장해 주세요.');
+    if (state.assignments.length >= 100) throw new ApiError(409, '로컬 과제 보관 한도(100개)에 도달했습니다.');
+    const generated = await ai.generate(state.profile, state.assignments);
+    const assignment = createAssignment(generated.curriculum, state.profile, generated.source);
+    await store.update(current => { if (current.assignments.length >= 100) throw new ApiError(409, '과제 보관 한도에 도달했습니다.'); current.assignments.unshift(assignment); });
+    res.status(201).json(publicAssignment(assignment));
+  });
+  app.patch('/api/assignments/:id/progress', async (req, res) => {
+    const body = z.object({ step: z.number().int().min(0), completed: z.boolean() }).parse(req.body);
+    const result = await store.update(state => { const a = findAssignment(state.assignments, req.params.id); if (body.step >= a.lessons.length) throw new ApiError(400, '잘못된 실습 단계입니다.'); a.completedSteps = body.completed ? [...new Set([...a.completedSteps, body.step])].sort() : a.completedSteps.filter(s => s !== body.step); return publicAssignment(a); });
+    res.json(result);
+  });
+  app.post('/api/assignments/:id/quiz', async (req, res) => {
+    const body = z.object({ answers: z.array(z.number().int().min(0).max(3)).min(2).max(5) }).parse(req.body);
+    res.json(await store.update(state => { const a = findAssignment(state.assignments, req.params.id); if (body.answers.length !== a.quiz.length) throw new ApiError(400, '모든 질문에 답해 주세요.'); const feedback = a.quiz.map((q, i) => ({ correct: q.answer === body.answers[i], answer: q.answer, explanation: q.explanation })); const result: QuizResult = { score: feedback.filter(f => f.correct).length, total: feedback.length, feedback }; a.quizResult = result; return result; }));
+  });
+  app.post('/api/assignments/:id/chat', expensive, async (req, res) => {
+    const body = z.object({ message: z.string().trim().min(1).max(2000), lessonIndex: z.number().int().min(0) }).parse(req.body);
+    const state = await store.read(); const a = findAssignment(state.assignments, req.params.id); if (body.lessonIndex >= a.lessons.length) throw new ApiError(400, '잘못된 실습 단계입니다.');
+    const result = await ai.chat(a, state.messages.filter(m => m.assignmentId === a.id), body.message, body.lessonIndex);
+    const messages = [{ id: randomUUID(), assignmentId: a.id, role: 'user' as const, content: body.message, createdAt: new Date().toISOString() }, { id: randomUUID(), assignmentId: a.id, role: 'assistant' as const, content: result.content, source: result.source, createdAt: new Date().toISOString() }];
+    await store.update(current => { current.messages.push(...messages); current.messages = current.messages.slice(-500); }); res.json(messages);
+  });
+  app.get('/api/github/search', async (req, res) => { const query = z.string().trim().min(2).max(120).parse(req.query.q); res.json(await github.search(query)); });
+  app.get('/api/github/repository', async (req, res) => { const name = repositoryNameSchema.parse(req.query.name); res.json(await github.details(name)); });
+  app.post('/api/assignments/:id/submission', async (req, res) => {
+    const body = z.object({ url: z.string().max(240), reflection: z.string().trim().min(20).max(3000) }).parse(req.body);
+    findAssignment((await store.read()).assignments, req.params.id); const name = parseRepositoryUrl(body.url);
+    const submission: Submission = { url: `https://github.com/${name}`, reflection: body.reflection, submittedAt: new Date().toISOString(), evidence: await github.evidence(body.url) };
+    await store.update(state => { findAssignment(state.assignments, req.params.id).submission = submission; }); res.json(submission);
+  });
+  app.use('/api', (_req, res) => res.status(404).json({ error: 'API를 찾을 수 없습니다.' }));
+  app.use(express.static(resolve('dist')));
+  app.get('/{*path}', (_req, res, next) => res.sendFile(resolve('dist/index.html'), error => { if (error) next(error); }));
+  app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    if (error instanceof z.ZodError) return res.status(400).json({ error: '입력 형식을 확인해 주세요.', details: error.issues.map(i => ({ field: i.path.join('.'), message: i.message })) });
+    if (error instanceof ApiError) return res.status(error.status).json({ error: error.message });
+    if (error instanceof SyntaxError) return res.status(400).json({ error: '올바른 JSON 형식이 아닙니다.' });
+    if ((error as { status?: number })?.status === 413) return res.status(413).json({ error: '입력 내용이 너무 큽니다.' });
+    console.error('Request failed:', error instanceof Error ? error.name : 'UnknownError');
+    return res.status(500).json({ error: '서버 처리에 실패했습니다. DB 연결과 서버 설정을 확인해 주세요.' });
+  });
+  return app;
+}

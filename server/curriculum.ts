@@ -1,0 +1,32 @@
+import { randomUUID } from 'node:crypto';
+import { type Assignment, type Curriculum, type Profile, styleLabels } from '../shared/schema.js';
+const projects = {
+  business: { title: '반복 업무를 줄이는 요청 관리 보드', entity: '업무 요청', fields: '제목, 담당자, 상태', analogy: '부서의 업무 접수대장', scenario: '요청을 등록하고, 진행 상태별로 분류하고, 완료 처리' },
+  data: { title: '숫자를 인사이트로 바꾸는 지표 대시보드', entity: '측정 기록', fields: '날짜, 분류, 측정값', analogy: '스프레드시트의 행과 열', scenario: '측정값을 등록하고, 분류별 평균을 계산하고, 필터로 비교' },
+  education: { title: '배운 것을 오래 기억하는 학습 카드', entity: '학습 카드', fields: '질문, 답변, 복습 상태', analogy: '과목별로 정리한 학습 노트', scenario: '카드를 등록하고, 답을 가린 채 복습하고, 이해도를 기록' }
+};
+export function generateRules(profile: Profile, previous: Assignment[]): Curriculum {
+  const project = projects[profile.domain];
+  const latest = previous[0];
+  const needsReview = !!latest?.quizResult && latest.quizResult.score / latest.quizResult.total < 0.67;
+  const ready = latest && latest.completedSteps.length === latest.lessons.length && latest.quizResult?.score === latest.quizResult?.total && !!latest.quizResult;
+  const difficulty = needsReview ? 'beginner' : ready && profile.level === 'beginner' ? 'intermediate' : profile.level;
+  const scaffold = profile.style === 'guided' ? '한 번에 한 파일만 변경하고, 각 단계마다 실행 명령과 예상 결과를 안내해 줘.' : profile.style === 'concept-first' ? '코드에 앞서 데이터 흐름과 설계 이유를 설명해 줘.' : '가장 작은 작동 버전을 먼저 만들고, 바꿔 볼 실험을 제시해 줘.';
+  const context = `${profile.major} 전공, ${profile.role} 직무의 ${profile.name}입니다. 목표는 ${profile.goal} 현재 ${profile.knowledge.length ? profile.knowledge.join(', ') : '코딩 경험이 거의 없는'} 수준입니다.`;
+  const lessons: Curriculum['lessons'] = [
+    { title: '내 업무를 데이터로 바꾸기', description: `${project.analogy}를 떠올려 보세요. ${project.entity} 하나를 표현하는 데 어떤 정보가 필요할까요?`, objective: `${project.fields}을 포함하는 TypeScript 타입을 만들고, 가상 데이터 3개를 정의합니다.`, prompt: `${context} ${project.entity} 관리 서비스를 만들고 싶어. ${project.fields} 필드를 가진 TypeScript 타입과 가상 데이터 3개를 만들어 줘. 실제 개인정보는 사용하지 마. ${scaffold}`, theory: `타입은 데이터의 형태를 약속합니다. ${project.analogy}의 각 항목이 필드, 항목 묶음 하나가 객체에 해당합니다. TypeScript는 실행 전에 잘못된 형태를 찾아주지만, 실행 중 외부에서 들어오는 값까지 자동으로 검사하지는 않습니다. 그래서 서버에는 별도의 입력 검증이 필요합니다.`, experiment: '필수 필드 하나를 지우고 편집기의 오류를 확인하세요. 다시 복원한 뒤, 숫자 필드를 문자열로 바꾸면 어떤 일이 일어나는지 관찰하세요.', checks: ['각 필드의 이름과 타입을 설명할 수 있다', '잘못된 타입을 넣었을 때 오류를 확인했다'] },
+    { title: '반응하는 화면 만들기', description: `${project.scenario}할 수 있는 작은 화면을 만듭니다.`, objective: `React의 state와 이벤트로 ${project.entity} 목록, 등록 폼, 필터를 구현합니다.`, prompt: `${context} 앞서 만든 타입을 사용해 React로 ${project.scenario}하는 화면을 만들어 줘. 아직 서버 없이 가상 데이터와 useState를 사용해. 빈 값 검증, 빈 목록, 접근 가능한 label을 넣어 줘. ${scaffold}`, theory: 'React에서 state는 화면이 기억하는 값입니다. 사용자의 입력이 이벤트를 만들고, 상태를 갱신하면 React가 다음 화면을 계산합니다. 배열을 직접 수정하는 대신 새 배열을 전달해야 변경을 일관되게 추적할 수 있습니다. 이 단계의 state는 메모리에만 있으므로 새로고침하면 사라집니다.', experiment: '항목을 추가한 다음 새로고침하세요. 사라지는 이유를 설명하고, 필터를 바꿨을 때 원래 데이터가 남아 있는지 확인하세요.', checks: ['추가와 필터가 화면에 반영된다', 'state와 영구 저장의 차이를 설명할 수 있다'] },
+    { title: '화면과 서버 연결하기', description: '브라우저에서 보낸 요청이 서버의 응답으로 돌아오는 경로를 추적합니다.', objective: `Express에 GET/POST /api/items를 만들고 React의 fetch로 ${project.entity} 데이터를 주고받습니다.`, prompt: `${context} TypeScript와 Express로 GET/POST /api/items를 구현하고 React에서 fetch로 연결해 줘. 런타임 입력 검증, 오류 응답, 로딩·실패 상태를 포함해. ${scaffold}`, theory: 'HTTP는 클라이언트와 서버가 요청과 응답을 주고받는 약속입니다. GET은 조회, POST는 새 데이터를 전달할 때 사용합니다. 상태 코드 2xx는 성공, 4xx는 요청 문제, 5xx는 서버 문제를 나타냅니다. 비동기 요청은 완료 시점이 다르므로 로딩 상태와 실패 처리를 따로 설계합니다.', experiment: '서버를 잠시 끄고 등록을 시도하세요. 개발자 도구 Network에서 실패를 확인하고, 사용자가 다시 시도할 수 있게 안내하세요.', checks: ['Network에서 요청·응답을 확인했다', '잘못된 입력에 400 응답과 안내가 나타난다'] },
+    { title: '기록을 남기고, 원리 설명하기', description: '앱을 껐다 켜도 남는 데이터를 만들고 GitHub에 학습 과정을 기록합니다.', objective: `PostgreSQL에 ${project.entity} 테이블을 만들고 API를 연결합니다. README에 실행법과 데이터 흐름을 작성합니다.`, prompt: `${context} Express API에 pg와 PostgreSQL을 연결해 ${project.fields}을 저장해 줘. 매개변수화된 SQL, 환경변수, DB 마이그레이션과 실행 README를 작성해 줘. ${difficulty === 'advanced' ? '동시 수정 충돌과 인덱스 설계도 설명해 줘.' : '각 SQL의 역할을 초보자도 이해하도록 설명해 줘.'} ${scaffold}`, theory: `관계형 DB는 구조가 있는 테이블에 데이터를 저장합니다. 기본 키는 ${project.entity} 하나를 구분하고, NOT NULL 같은 제약은 데이터의 약속을 지킵니다. SQL에 사용자 문자열을 직접 붙이면 의도하지 않은 명령으로 해석될 수 있으므로 $1 같은 매개변수로 값을 분리합니다. 트랜잭션은 여러 변경을 모두 반영하거나 함께 취소합니다.`, experiment: '새 항목을 저장하고 서버를 재시작하세요. 데이터가 유지되는지 확인한 뒤, README에 화면 → API → DB → 응답의 흐름을 자신의 말로 설명하세요.', checks: ['재시작 후에도 저장한 데이터가 남아 있다', 'SQL 값에 매개변수를 사용했다', 'README에 실행 방법과 배운 원리를 기록했다'] }
+  ];
+  if (difficulty !== 'beginner') lessons.push({ title: '한 단계 더: 실패와 중복 다루기', description: '실제 업무에서 발생할 수 있는 중복 요청과 예외를 다룹니다.', objective: '중복 등록을 막는 제약 조건과 API 통합 테스트를 추가합니다.', prompt: `${context} 만든 서비스에 중복 등록 방지 제약과 통합 테스트를 추가해 줘. 성공, 잘못된 입력, 중복 요청 사례를 검증해 줘. ${scaffold}`, theory: '클라이언트의 버튼 비활성화만으로 중복을 완전히 막을 수 없습니다. 서버와 DB에서 불변 조건을 지켜야 여러 요청이 동시에 와도 일관성이 유지됩니다. 통합 테스트는 실제 경계를 통과한 결과를 확인합니다.', experiment: '같은 요청을 거의 동시에 두 번 보내고 DB에 몇 개가 저장되는지 확인하세요.', checks: ['중복 요청의 결과가 일관적이다', '성공과 실패 테스트를 모두 실행했다'] });
+  return { title: project.title, summary: `${profile.role}에서 익숙한 문제를 출발점으로 ${project.scenario}하는 웹 앱을 만듭니다. 목표: ${profile.goal}`, rationale: `${profile.major} · ${profile.role} 경험을 ${project.analogy}에 연결합니다. '${styleLabels[profile.style]}' 방식과 회당 ${profile.minutes}분에 맞춰 ${lessons.length}회로 나눕니다.${needsReview ? ' 이전 이해도 확인에서 어려웠던 기초를 다시 다룹니다.' : ready ? ' 이전 과제의 단계와 이해도 확인을 마쳐 확장 실습을 포함합니다.' : ''}`, difficulty, minutes: profile.minutes * lessons.length, concepts: ['TypeScript 타입', 'React 상태', 'HTTP 요청·응답', '입력 검증', 'PostgreSQL', 'Git 기록'], lessons,
+    quiz: [
+      { question: 'React state에만 저장한 데이터가 새로고침 후 사라지는 이유는?', options: ['서버의 권한 설정이 바뀌어서', 'state가 브라우저 메모리에만 있었기 때문에', 'TypeScript가 데이터를 삭제해서', 'GitHub에 올리지 않아서'], answer: 1, explanation: '컴포넌트의 state는 메모리의 값입니다. 지속하려면 서버의 데이터베이스 같은 영구 저장소에 기록하고 다시 조회해야 합니다.' },
+      { question: 'TypeScript를 사용해도 서버에서 입력을 검증해야 하는 이유는?', options: ['외부 요청의 데이터는 런타임 타입 검사를 자동으로 받지 않아서', 'TypeScript가 SQL을 실행하기 때문에', 'React가 서버 코드를 수정해서', 'HTTP는 숫자를 전달할 수 없어서'], answer: 0, explanation: 'TypeScript 타입은 실행 시 제거됩니다. 외부 입력은 Zod 같은 런타임 검증 도구와 DB 제약 조건으로 확인해야 합니다.' },
+      { question: 'SQL에 사용자 입력을 안전하게 전달하는 방법은?', options: ['입력을 SQL 문자열 뒤에 붙인다', '프론트엔드에서만 검사한다', '매개변수화된 쿼리의 값으로 전달한다', '모든 입력을 숨긴다'], answer: 2, explanation: 'SQL 구조와 데이터를 분리하면 입력이 SQL 명령으로 해석되는 것을 막을 수 있습니다. 예: WHERE id = $1, [id].' }
+    ] };
+}
+export function createAssignment(curriculum: Curriculum, profile: Profile, source: Assignment['source']): Assignment {
+  return { ...curriculum, id: randomUUID(), createdAt: new Date().toISOString(), source, profile: structuredClone(profile), completedSteps: [] };
+}
