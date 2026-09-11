@@ -1,6 +1,6 @@
 # Vibe Lab
 
-전공·직무·배경지식·학습 성향에서 출발하는 바이브 코딩 학습 서비스의 **로컬 1인용 MVP**입니다. TypeScript / React / Express / PostgreSQL로 구성했습니다. 기존 상위 폴더 파일은 변경하지 않습니다.
+전공·직무·배경지식·학습 성향에서 출발하는 바이브 코딩 학습 서비스의 **로컬 1인용 MVP**입니다. TypeScript / React / Express / PostgreSQL로 구성했습니다. 개발 저장소: https://github.com/heurogenesis/Vibe_Lab. 로컬 작업 폴더: `C:\Users\monke\Vibe_Lab`.
 
 ## 구현한 흐름
 
@@ -14,7 +14,7 @@
 
 ## 빠른 실행
 
-Node.js 22.12 이상(검증 환경: 24)을 사용합니다. 아래 명령은 이 README가 있는 `vibe-lab` 디렉터리에서 실행합니다.
+Node.js 22.12 이상(검증 환경: 24)을 사용합니다. 아래 명령은 이 README가 있는 `Vibe_Lab` 저장소 루트에서 실행합니다.
 
 ```powershell
 npm install
@@ -96,7 +96,7 @@ npm start
 
 - 일반 테스트: API 학습 흐름, 오류·출처 검증, 진도 동시 갱신, 학습 결과 기반 난이도, GitHub 응답 계약, URL 제한, PostgreSQL JSONB 저장 계약(pg-mem).
 - 실제 PostgreSQL 테스트: **폐기 가능한 별도 테스트 DB**를 만든 후 `TEST_DATABASE_URL`을 설정하고 `npm test`를 실행합니다. 테스트는 테스트 워크스페이스를 변경합니다. 운영용 `DATABASE_URL`을 테스트에 복사하지 마세요.
-- `.github/workflows/ci.yml`은 PostgreSQL 서비스와 함께 빌드·테스트를 실행합니다. 이 **vibe-lab 폴더 자체를 저장소 루트로 올릴 때** 자동으로 인식됩니다. 상위 KNDA 저장소에서 사용할 경우 워크플로를 루트 `.github/workflows`로 옮기고 `working-directory`, npm 캐시 경로를 `vibe-lab`으로 조정하세요.
+- `.github/workflows/ci.yml`은 저장소 루트에 배치되어 main 브랜치 push와 PR에서 PostgreSQL 서비스와 함께 빌드·테스트를 실행합니다.
 - 현재 환경에서 실제 PostgreSQL·AI 키가 없으면 해당 외부 서비스의 실연결 검증은 별도입니다. pg-mem은 실제 PostgreSQL의 잠금/롤백 검증을 대신하지 않습니다.
 
 ## 구조
@@ -124,3 +124,6 @@ docs/          API 명세, 후속 요구사항
 - [PostgreSQL 튜토리얼](https://www.postgresql.org/docs/current/tutorial.html)
 
 다음 범위를 결정하기 위한 질문은 [추가 요구사항](docs/REQUIREMENTS.md), 개발 API는 [API 명세](docs/API.md)를 참고하세요.
+
+
+Fork에서 작업 이력을 남기는 방법은 [Git 작업 안내](docs/GIT_WORKFLOW.md)를 참고하세요.
