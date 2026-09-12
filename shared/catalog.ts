@@ -1,4 +1,5 @@
 import type { Profile } from './schema.js';
+import { hasRoleSignal, resolveGoalIntent, resolveRole, type GoalIntentId, type Role } from './taxonomy.js';
 
 // IDs are content identifiers, not database enums. New personas and disciplines are
 // registered here without changing stored profiles or the execution protocol.
@@ -44,22 +45,47 @@ export function usesPractice(profile: Profile) { return profile.domain === 'data
 export function preferredThemes(profile: Profile): string[] {
   const explicit = (profile.interests || []).filter(id => themes.some(t => t.id === id));
   if (explicit.length) return [...new Set(explicit)];
-  const context = `${profile.role} ${profile.goal}`.toLowerCase();
-  if (/품질|검사|quality/.test(context)) return ['quality','clean','compare'];
-  if (/api|비동기|서버|backend/.test(context)) return ['async','clean','compare'];
-  if (/연구|실험|r&d|research/.test(context)) return ['compare','clean','async'];
-  return ['clean','compare','quality'];
+  // The role decides which kind of data problem comes first. The regexes that used to live here are now one
+  // classification in shared/taxonomy.ts, so the same wording cannot mean different things in different places.
+  return roleOf(profile).themeBias;
+}
+function roleOf(profile: Profile): Role { return resolveRole({ role: profile.role, roleId: profile.roleId, goal: profile.goal }); }
+// The normalized identity of a learner. Everything downstream reasons about this, never about the raw sentences.
+//
+// contentKey is the part shared by every learner with this background, so a generated body may be cached under
+// it: discipline(10) x role(9) x theme(4) = 360 possible values, no matter how many learners sign up.
+// level, goalIntent and style only change how the same body is presented, so they stay out of contentKey -
+// including them would multiply the cache and the generation cost by 45 without changing the subject matter.
+// The learner's own goal sentence is in neither key: it is personal text, applied at render time only.
+export type ProfileSignature = {
+  discipline: Discipline; role: Role; themeId: string;
+  level: Profile['level']; goalIntent: GoalIntentId;
+  contentKey: string; renderKey: string;
+};
+export function profileSignature(profile: Profile): ProfileSignature {
+  const discipline = resolveDiscipline(profile);
+  const role = roleOf(profile);
+  const themeId = preferredThemes(profile)[0];
+  const goalIntent = resolveGoalIntent(profile.goal).id;
+  return { discipline, role, themeId, level: profile.level, goalIntent,
+    contentKey: `${discipline.id}:${role.id}:${themeId}`,
+    renderKey: `${discipline.id}:${role.id}:${themeId}:${profile.level}:${goalIntent}:${profile.style}` };
 }
 export function recommendation(profile: Profile) {
   const d = resolveDiscipline(profile);
-  const project = /\bpm\b|프로젝트|생산관리|project manager/i.test(`${profile.role} ${profile.goal}`);
+  const role = roleOf(profile);
+  // Primary role or a secondary planning signal: someone described as "연구개발 및 PM" is framed as a
+  // researcher but still gets the project aggregation track.
+  const project = role.id === 'planning' || hasRoleSignal(`${profile.role} ${profile.goal}`, 'planning');
   const tracks = project ? [d, projectDiscipline] : [d];
   const preferences = preferredThemes(profile);
-  const primary = /\bpm\b|프로젝트|project/i.test(profile.goal) && project ? projectDiscipline : d;
+  // A planning role still learns on their own field's data; the project track is added alongside, and only
+  // takes over when the field itself could not be identified.
+  const primary = project && d.id === 'general' ? projectDiscipline : d;
   const ids = preferences.slice(0, 3).map(t => `${primary.id}:${t}`);
   for (const theme of themes) if (ids.length < 3 && !ids.includes(`${primary.id}:${theme.id}`)) ids.push(`${primary.id}:${theme.id}`);
   if (project && primary.id !== 'project') ids[2] = 'project:compare';
-  return { discipline: d, tracks, exerciseIds: ids, reason: `${profile.major} · ${profile.role} 배경에서 ${primary.subject}을 다룹니다. ${d.id === 'general' ? '등록된 전공과 정확히 일치하지 않아 공통 데이터 실습으로 시작합니다. ' : ''}${project ? 'PM 업무를 위한 프로젝트 집계를 함께 추천합니다. ' : ''}${profile.personaId === 'student' ? '전공 실험의 입력·출력 관계를 먼저 확인합니다.' : '업무 데이터의 누락·오류·경계 조건을 함께 확인합니다.'} 난이도는 직무 대신 선택한 코딩 경험을 기준으로 정합니다.` };
+  return { discipline: d, tracks, role, exerciseIds: ids, reason: `${d.label} · ${role.label} 조합에서 ${primary.subject}의 ${role.metric}을 다룹니다. ${role.decision}를 판단할 때 쓰는 계산이라고 생각하면 됩니다. ${d.id === 'general' ? '등록한 전공과 정확히 일치하는 분야가 없어 공통 데이터 실습으로 시작합니다. ' : ''}${project ? '기획·PM 직무라 프로젝트 집계 실습을 함께 추천합니다. ' : ''}난이도는 직무 대신 선택한 코딩 경험을 기준으로 정합니다.` };
 }
 
 export type ExerciseTest = { name: string; input: unknown; expected: unknown; hint: string };

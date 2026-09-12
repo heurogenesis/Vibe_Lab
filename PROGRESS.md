@@ -372,3 +372,49 @@ npm.cmd run dev
   - 위 2)의 SESSION_SECRET을 .env에 추가할지 여부 (추가하면 재시작해도 로그인이 유지됨).
   - 비밀번호 재설정을 22일 포트폴리오 범위에 넣을지 여부.
 ```
+
+### 2026-09-12 (7차) 프로필 자유 입력 정규화 계층 도입
+
+```text
+날짜 / 담당 AI: 2026-09-12 / Claude Code
+작업 목적: 자유 입력(NLP) 항목 재검토, 프로필 카테고리 조합으로 정규화하여 사용자 수와 무관하게 유한한 콘텐츠 조합 확보
+브랜치: feature/mvp-savepoint-20260912
+설계 문서: docs/DATA_ARCHITECTURE.md 11절 (신규 추가)
+변경 파일:
+  shared/taxonomy.ts(신규) - 직무 9종·목표 의도 5종 분류기
+  shared/catalog.ts - preferredThemes/recommendation이 정규식 대신 분류 결과를 사용, profileSignature() 추가
+  shared/schema.ts - roleId 추가
+  server/practice-curriculum.ts - 직무의 subject/metric/decision으로 본문 생성, 커리큘럼 본문에서 개인 goal 문장 제거
+  src/Profile.tsx - 페르소나를 select로, 직무 분류 select 추가(자동 분류 결과를 화면에 표시)
+  tests/taxonomy.test.ts(신규) - 14개 테스트
+  tests/practice.test.ts - personaId 타입 정리
+재검토 결과 (자유 입력 항목):
+  - major: 유지. 분야 10종으로 분류하고 사용자가 select로 덮어쓸 수 있음
+  - role: 문제였음. 이전에는 문장에 끼워 넣는 텍스트로만 쓰여 같은 전공이면 직무가 달라도 실습이 동일했음 -> 9종 분류 도입
+  - goal: 유지하되 5종 의도로 분류. 문장 자체는 개인 텍스트라 공유 본문에 넣지 않음
+  - personaId: 자유 입력이던 것을 화면에서 select로 제한. 단 스키마는 열린 문자열 유지(아래 참고)
+중요한 되돌림(기록용): personaId를 zod enum으로 좁혔다가 기존 테스트
+  'supports old STEM profiles and new persona IDs without a schema migration'에 걸려 되돌림.
+  catalog.ts 첫 줄의 "IDs are content identifiers, not database enums" 원칙이 의도된 설계였음.
+  결론: 저장은 열린 문자열, 해석은 닫힌 카테고리. 모르는 id는 거부하지 않고 알려진 카테고리로 폴백.
+분류 규칙: 키워드 일치 수 우선, 동점이면 텍스트에서 먼저 나온 키워드 우선(한국어 직무명은 앞이 도메인,
+  뒤가 일반 활동 - 공정설계는 공정, 회로설계는 설계). 직무명으로 판정되지 않을 때만 목표 문장 참고.
+  부차 신호는 유지: '연구개발 및 PM'은 연구로 분류하되 프로젝트 집계 실습을 추가로 붙임.
+검증 명령과 실제 결과:
+  - npm run typecheck: 통과
+  - npm test: 80 passed | 1 skipped (이전 66개 + 신규 14개). 기존 테스트 전부 유지
+  - 브라우저 실측(로그인 상태, 같은 전공 화학공학에서 직무만 변경):
+      공정 엔지니어 -> 첫 실습 '기준 충족 비율', 설명 '공정 계측 로그... 공정 조건을 조정할지',
+                      체크 '이 계산이 수율과 변동 폭과 어떻게 연결되는지'
+      품질 엔지니어 -> 설명 '검사 측정값... 합격으로 판정할지', 체크 '규격 충족 비율'
+      연구개발     -> 첫 실습 '그룹별 비교', 설명 '실험 관측값... 실험 조건을 바꿀지', 체크 '재현성과 분산'
+    실습 순서·설명·체크리스트가 모두 직무에 따라 달라지는 것을 확인
+조합 공간: contentKey = discipline(10) x role(9) x theme(4) = 360. 사용자 수와 무관하게 고정.
+  level/style/goalIntent는 표현만 바꾸므로 키에서 제외(포함 시 45배로 증가).
+남은 문제 / 다음 작업:
+  1) 퀴즈 3문항은 아직 고정. 직무·분야별 변형은 미적용.
+  2) generateRules(비실습 경로)는 domain 3종 프로젝트 템플릿 그대로. 직무 반영은 practice 경로에만 적용됨.
+  3) 생성 본문을 실제로 공유 캐시에 저장하는 단계(L2)는 미구현. 지금은 사용자별로 복사 저장(9KB)이 유지됨.
+  4) 세션이 메모리라 dev 서버 재시작 시 로그아웃되는 문제를 이번 검증 중에도 겪음. SESSION_SECRET과 영속 세션 저장소 필요.
+사용자 승인 또는 결정이 필요한 사항: 직무 9종 분류가 대상 사용자층에 맞는지 검토 요청(추가·변경 희망 직무가 있는지).
+```

@@ -1,7 +1,11 @@
 import { z } from 'zod';
 export const profileSchema = z.object({
+  // Open string by design: content ids must be addable without a schema migration. Unrecognised values are
+  // resolved to a known category in shared/taxonomy.ts rather than rejected here.
   personaId: z.string().trim().min(1).max(80).optional(),
   disciplineId: z.string().trim().min(1).max(80).optional(),
+  // Explicit override for the role classified from the free-text job title. See shared/taxonomy.ts.
+  roleId: z.string().trim().min(1).max(80).optional(),
   interests: z.array(z.string().trim().min(1).max(80)).max(10).optional(),
   name: z.string().trim().min(1).max(40), major: z.string().trim().min(1).max(80), role: z.string().trim().min(1).max(80),
   level: z.enum(['beginner', 'intermediate', 'advanced']), style: z.enum(['hands-on', 'concept-first', 'guided']),
