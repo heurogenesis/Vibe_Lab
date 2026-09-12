@@ -11,7 +11,7 @@ import { createAssignment, generateRules } from '../server/curriculum.js';
 import { LearningAI } from '../server/ai.js';
 import { createApp } from '../server/app.js';
 import { GitHubClient } from '../server/github.js';
-import { FileStore } from '../server/store.js';
+import { FileUserStore } from '../server/store.js';
 import { compileCode, workerProgram, type RunResult } from '../src/runner.js';
 import { loadDataset } from '../src/data-loader.js';
 
@@ -97,21 +97,22 @@ describe('external data without a server data copy',()=>{
 describe('practice result persistence and sandbox boundary',()=>{
  it('stores only compact bounded reports and rejects mismatched exercises or full datasets',async()=>{
   const folder=await mkdtemp(join(tmpdir(),'vibelab-practice-'));folders.push(folder);
-  const file=join(folder,'state.json');const store=new FileStore(file);
+  const file=join(folder,'state.json');const users=new FileUserStore(file);
+  const learner=await users.createUser({handle:'tester',displayName:'테스터'});const store=users.forUser(learner.id);
   const a=createAssignment(generateRules(profile,[]),profile,'rules');
   await store.update(s=>{s.profile=profile;s.assignments=[a];});
-  const app=createApp(store,new LearningAI(),new GitHubClient());
+  const app=createApp(users,new LearningAI(),new GitHubClient());
   const exercise=getExercise(a.practice!.exerciseIds[0])!;
   const body={assignmentId:a.id,exerciseId:exercise.id,version:CATALOG_VERSION,passed:exercise.tests.length,total:exercise.tests.length,status:'passed',dataSourceId:`sample:${exercise.disciplineId}`};
-  await request(app).post('/api/practice/results').set('X-Vibe-Lab','1').send({...body,rows:exercise.sample}).expect(400);
-  await request(app).post('/api/practice/results').set('X-Vibe-Lab','1').send({...body,version:'stale'}).expect(400);
-  await request(app).post('/api/practice/results').set('X-Vibe-Lab','1').send({...body,passed:0}).expect(400);
-  await request(app).post('/api/practice/results').set('X-Vibe-Lab','1').send(body).expect(201);
-  await request(app).post('/api/practice/results').set('X-Vibe-Lab','1').send({...body,exerciseId:'life:clean'}).expect(400);
-  const state=await new FileStore(file).read();expect(state.practiceHistory?.[0].verification).toBe('browser-reported');expect(state.assignments[0].practiceAttempts).toHaveLength(1);
+  await request(app).post('/api/practice/results').set('X-Vibe-Lab','1').set('X-Vibe-User',learner.id).send({...body,rows:exercise.sample}).expect(400);
+  await request(app).post('/api/practice/results').set('X-Vibe-Lab','1').set('X-Vibe-User',learner.id).send({...body,version:'stale'}).expect(400);
+  await request(app).post('/api/practice/results').set('X-Vibe-Lab','1').set('X-Vibe-User',learner.id).send({...body,passed:0}).expect(400);
+  await request(app).post('/api/practice/results').set('X-Vibe-Lab','1').set('X-Vibe-User',learner.id).send(body).expect(201);
+  await request(app).post('/api/practice/results').set('X-Vibe-Lab','1').set('X-Vibe-User',learner.id).send({...body,exerciseId:'life:clean'}).expect(400);
+  const state=await new FileUserStore(file).forUser(learner.id).read();expect(state.practiceHistory?.[0].verification).toBe('browser-reported');expect(state.assignments[0].practiceAttempts).toHaveLength(1);
   expect(state.practiceHistory?.[0]).not.toHaveProperty('rows');expect(state.practiceHistory?.[0]).not.toHaveProperty('code');
   await store.update(s=>{s.practiceHistory=Array(100).fill(state.practiceHistory![0]);});
-  await request(app).post('/api/practice/results').set('X-Vibe-Lab','1').send(body).expect(201);
+  await request(app).post('/api/practice/results').set('X-Vibe-Lab','1').set('X-Vibe-User',learner.id).send(body).expect(201);
   expect((await store.read()).practiceHistory).toHaveLength(100);
   const response=await request(app).get('/practice-sandbox.html').expect(200);
   expect(response.headers['content-security-policy']).toContain("connect-src 'none'");

@@ -38,3 +38,11 @@ export const defaultProfile: Profile = { name: '학습자', major: '경영학', 
 export const levelLabels = { beginner: '입문', intermediate: '기초 경험 있음', advanced: '개발 경험 있음' };
 export const styleLabels = { 'hands-on': '직접 만들며 배우기', 'concept-first': '원리를 먼저 이해하기', guided: '단계별 안내 따라가기' };
 export const domainLabels = { business: '업무 자동화', data: '데이터 활용', education: '교육·학습' };
+// Multi-user layer. The single-learner state above is unchanged; the directory below wraps it so remote
+// authentication can replace the identity source later without another storage migration.
+// See docs/MULTI_USER_DESIGN.md.
+export const STORE_VERSION = 2;
+export const userHandleSchema = z.string().trim().min(2).max(24).regex(/^[a-z0-9][a-z0-9_-]*$/i, '영문, 숫자, 하이픈(-), 밑줄(_)만 사용할 수 있어요.');
+export const createUserSchema = z.object({ handle: userHandleSchema, displayName: z.string().trim().min(1).max(40) }).strict();
+export type User = { id: string; handle: string; displayName: string; createdAt: string };
+export type MultiUserState = { version: number; users: User[]; workspaces: Record<string, LearningState> };

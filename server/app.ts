@@ -4,17 +4,25 @@ import { rateLimit } from 'express-rate-limit';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { z } from 'zod';
-import { profileSchema, type Assignment, type PublicAssignment, type QuizResult, type Submission } from '../shared/schema.js';
+import { createUserSchema, profileSchema, type Assignment, type PublicAssignment, type QuizResult, type Submission } from '../shared/schema.js';
 import { createAssignment } from './curriculum.js';
 import { ApiError, GitHubClient, parseRepositoryUrl, repositoryNameSchema } from './github.js';
 import { LearningAI } from './ai.js';
-import type { Store } from './store.js';
+import { DuplicateHandleError, type Store, type UserStore } from './store.js';
+import { resolveUser } from './identity.js';
 import { CATALOG_VERSION, getExercise } from '../shared/catalog.js';
 import { dataSources } from '../shared/data-sources.js';
 import { sandboxCsp, sandboxHtml } from './sandbox.js';
 function publicAssignment(a: Assignment): PublicAssignment { return { ...a, quiz: a.quiz.map(({ question, options }) => ({ question, options })) }; }
 function findAssignment(assignments: Assignment[], id: string | string[]) { const target = z.string().parse(id); const a = assignments.find(a => a.id === target); if (!a) throw new ApiError(404, '과제를 찾을 수 없습니다.'); return a; }
-export function createApp(store: Store, ai: LearningAI, github: GitHubClient, options: { port?: number; githubAuthenticated?: boolean } = {}) {
+type ScopedRequest = express.Request & { workspace?: Store };
+// Handlers never learn who the learner is; they only receive the workspace scoped to them.
+function workspaceOf(req: express.Request): Store {
+  const workspace = (req as ScopedRequest).workspace;
+  if (!workspace) throw new ApiError(401, '사용할 학습자를 먼저 선택해 주세요.');
+  return workspace;
+}
+export function createApp(users: UserStore, ai: LearningAI, github: GitHubClient, options: { port?: number; githubAuthenticated?: boolean } = {}) {
   const app = express(); app.disable('x-powered-by');
   app.get('/practice-sandbox.html', (_req,res) => {
     res.set({ 'Content-Security-Policy': sandboxCsp, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
@@ -33,10 +41,22 @@ export function createApp(store: Store, ai: LearningAI, github: GitHubClient, op
   app.use('/api', rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.' } }));
   app.use(express.json({ limit: '64kb' }));
   const expensive = rateLimit({ windowMs: 60_000, limit: 12, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: 'AI 요청이 많습니다. 1분 후 다시 시도해 주세요.' } });
-  app.get('/api/health', async (_req, res) => { await store.read(); res.json({ storage: store.mode, ai: ai.enabled, githubAuthenticated: !!options.githubAuthenticated, localOnly: true }); });
-  app.get('/api/state', async (_req, res) => { const state = await store.read(); res.json({ ...state, assignments: state.assignments.map(publicAssignment) }); });
-  app.put('/api/profile', async (req, res) => { const profile = profileSchema.parse(req.body); await store.update(state => { state.profile = profile; }); res.json(profile); });
-  app.post('/api/practice/results', async (req, res) => {
+  // Health and the user directory have to work before a learner is chosen, so they sit ahead of the scope guard.
+  app.get('/api/health', async (_req, res) => { await users.listUsers(); res.json({ storage: users.mode, ai: ai.enabled, githubAuthenticated: !!options.githubAuthenticated, localOnly: true }); });
+  app.get('/api/users', async (_req, res) => { res.json(await users.listUsers()); });
+  app.post('/api/users', async (req, res) => {
+    const body = createUserSchema.parse(req.body);
+    try { res.status(201).json(await users.createUser(body)); }
+    catch (error) { if (error instanceof DuplicateHandleError) throw new ApiError(409, error.message); throw error; }
+  });
+  // Everything past this point belongs to exactly one learner. Identity resolution lives in server/identity.ts.
+  app.use('/api', async (req, _res, next) => {
+    try { const user = await resolveUser(req, users); (req as ScopedRequest).workspace = users.forUser(user.id); next(); }
+    catch (error) { next(error); }
+  });
+  app.get('/api/state', async (req, res) => { const state = await workspaceOf(req).read(); res.json({ ...state, assignments: state.assignments.map(publicAssignment) }); });
+  app.put('/api/profile', async (req, res) => { const profile = profileSchema.parse(req.body); await workspaceOf(req).update(state => { state.profile = profile; }); res.json(profile); });
+  app.post('/api/practice/results', async (req, res) => { const store = workspaceOf(req);
     const body = z.object({ exerciseId: z.string().max(100), version: z.literal(CATALOG_VERSION), passed: z.number().int().min(0), total: z.number().int().min(1).max(20), status: z.enum(['passed','failed','error']), dataSourceId: z.string().max(100), assignmentId: z.string().max(100).optional() }).strict().parse(req.body);
     const exercise = getExercise(body.exerciseId);
     if (!exercise || body.total !== exercise.tests.length || body.passed > body.total || (body.status === 'passed') !== (body.passed === body.total)) throw new ApiError(400, '실습 버전 또는 결과 형식이 올바르지 않습니다.');
@@ -54,7 +74,7 @@ export function createApp(store: Store, ai: LearningAI, github: GitHubClient, op
     });
     res.status(201).json(record);
   });
-  app.post('/api/assignments', expensive, async (_req, res) => {
+  app.post('/api/assignments', expensive, async (req, res) => { const store = workspaceOf(req);
     const state = await store.read(); if (!state.profile) throw new ApiError(400, '학습 프로필을 먼저 저장해 주세요.');
     if (state.assignments.length >= 100) throw new ApiError(409, '로컬 과제 보관 한도(100개)에 도달했습니다.');
     const generated = await ai.generate(state.profile, state.assignments);
@@ -62,16 +82,16 @@ export function createApp(store: Store, ai: LearningAI, github: GitHubClient, op
     await store.update(current => { if (current.assignments.length >= 100) throw new ApiError(409, '과제 보관 한도에 도달했습니다.'); current.assignments.unshift(assignment); });
     res.status(201).json(publicAssignment(assignment));
   });
-  app.patch('/api/assignments/:id/progress', async (req, res) => {
+  app.patch('/api/assignments/:id/progress', async (req, res) => { const store = workspaceOf(req);
     const body = z.object({ step: z.number().int().min(0), completed: z.boolean() }).parse(req.body);
     const result = await store.update(state => { const a = findAssignment(state.assignments, req.params.id); if (body.step >= a.lessons.length) throw new ApiError(400, '잘못된 실습 단계입니다.'); a.completedSteps = body.completed ? [...new Set([...a.completedSteps, body.step])].sort() : a.completedSteps.filter(s => s !== body.step); return publicAssignment(a); });
     res.json(result);
   });
-  app.post('/api/assignments/:id/quiz', async (req, res) => {
+  app.post('/api/assignments/:id/quiz', async (req, res) => { const store = workspaceOf(req);
     const body = z.object({ answers: z.array(z.number().int().min(0).max(3)).min(2).max(5) }).parse(req.body);
     res.json(await store.update(state => { const a = findAssignment(state.assignments, req.params.id); if (body.answers.length !== a.quiz.length) throw new ApiError(400, '모든 질문에 답해 주세요.'); const feedback = a.quiz.map((q, i) => ({ correct: q.answer === body.answers[i], answer: q.answer, explanation: q.explanation })); const result: QuizResult = { score: feedback.filter(f => f.correct).length, total: feedback.length, feedback }; a.quizResult = result; return result; }));
   });
-  app.post('/api/assignments/:id/chat', expensive, async (req, res) => {
+  app.post('/api/assignments/:id/chat', expensive, async (req, res) => { const store = workspaceOf(req);
     const body = z.object({ message: z.string().trim().min(1).max(2000), lessonIndex: z.number().int().min(0) }).parse(req.body);
     const state = await store.read(); const a = findAssignment(state.assignments, req.params.id); if (body.lessonIndex >= a.lessons.length) throw new ApiError(400, '잘못된 실습 단계입니다.');
     const result = await ai.chat(a, state.messages.filter(m => m.assignmentId === a.id), body.message, body.lessonIndex);
@@ -80,7 +100,7 @@ export function createApp(store: Store, ai: LearningAI, github: GitHubClient, op
   });
   app.get('/api/github/search', async (req, res) => { const query = z.string().trim().min(2).max(120).parse(req.query.q); res.json(await github.search(query)); });
   app.get('/api/github/repository', async (req, res) => { const name = repositoryNameSchema.parse(req.query.name); res.json(await github.details(name)); });
-  app.post('/api/assignments/:id/submission', async (req, res) => {
+  app.post('/api/assignments/:id/submission', async (req, res) => { const store = workspaceOf(req);
     const body = z.object({ url: z.string().max(240), reflection: z.string().trim().min(20).max(3000) }).parse(req.body);
     findAssignment((await store.read()).assignments, req.params.id); const name = parseRepositoryUrl(body.url);
     const submission: Submission = { url: `https://github.com/${name}`, reflection: body.reflection, submittedAt: new Date().toISOString(), evidence: await github.evidence(body.url) };

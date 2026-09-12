@@ -256,3 +256,39 @@ npm.cmd run dev
 권장 조치(택1): (a) 현재 프로필과 최근 과제의 profile이 다르면 홈에 배너 + "새 과제 생성" 버튼을 눈에 띄게 노출 (src/Home.tsx 1파일), (b) 프로필 저장 직후 새 과제 생성 여부를 묻기, (c) 현행 유지 + 안내 문구만 강화
 남은 문제 / 다음 작업: 사용자 요청으로 다중 사용자(사용자별 아이디) 설계가 우선 진행됨. P0-05 UX 조치는 그 작업과 함께 반영 권장.
 ```
+
+### 2026-09-12 (4차) 다중 사용자(사용자별 아이디) 구현
+
+```text
+날짜 / 담당 AI: 2026-09-12 / Claude Code
+작업 목적: 사용자별 아이디 생성·전환 기능 구현 (로컬 우선, 추후 remote 확장 고려한 설계)
+브랜치: feature/mvp-savepoint-20260912
+사용자 결정(대화에서 승인): (D1) 인증은 핸들만, 비밀번호 없음 / (D2) 기존 .data/learning.json은 백업 후 새로 시작
+설계 문서: docs/MULTI_USER_DESIGN.md (신규)
+변경 파일:
+  [S1 저장 구조] shared/schema.ts, server/store.ts
+  [S2 신원 심·라우트] server/identity.ts(신규), server/app.ts (+ server/index.ts 생성자 1줄)
+  [S3 클라이언트] src/api.ts, src/Users.tsx(신규), src/App.tsx
+  [동반 수정] tests/learning.test.ts, tests/practice.test.ts, tests/postgres.integration.test.ts, db/001_initial.sql
+  ※ AGENTS.md의 "1건당 1~2파일" 규칙에 맞춰 S1/S2/S3로 나눠 진행했고, index.ts(1줄)와 테스트·DB는 각 단계의 필수 동반 수정입니다.
+핵심 설계:
+  - resolveUser(req)가 신원을 판단하는 유일한 지점(server/identity.ts). 로컬은 X-Vibe-User 헤더를 사용자 명부와 대조하고, remote 전환 시 이 함수 내부만 세션/OAuth로 교체하면 됨.
+  - UserStore.forUser(userId)가 기존 Store 인터페이스 그대로의 "한 사람 워크스페이스" 뷰를 반환 -> 라우트 핸들러 로직은 사실상 무변경.
+  - 저장 구조 v2: {version:2, users:[...], workspaces:{userId: 기존 LearningState}}. 기존 상태 타입은 변경 없음.
+  - 헤더 방식은 인증이 아니라 워크스페이스 분리임을 코드 주석·설계 문서·UI 문구에 명시. localhost 바인딩과 host 검사가 유일한 신뢰 근거.
+검증 명령과 실제 결과:
+  - npm run typecheck: 통과
+  - npm test: 66 passed | 1 skipped(TEST_DATABASE_URL 필요). 첫 실행에서 electronics:clean이 5초 타임아웃으로 1회 실패했으나 재실행 시 310ms로 통과 - 콜드 스타트(transform 10.5s) 영향으로 판단하며 이번 변경과 무관.
+  - npm run build: 통과 (기존 typescript 청크 크기 경고만 유지)
+  - 신규 테스트: tests/learning.test.ts의 'multi-user workspaces' 스위트 - 사용자 생성, 중복 핸들 409, 잘못된 핸들 400, 미선택 401, 알 수 없는 사용자 401, 두 사용자 워크스페이스 격리
+  - 기존 데이터 마이그레이션: 서버 재기동 시 v1 파일(29,285 bytes)이 .data/learning.backup-2026-09-12T13-00-26-878Z.json으로 이동되고 빈 v2로 시작함을 실제 확인
+  - 브라우저(내장 브라우저, http://127.0.0.1:5173): 학습자 선택 화면 -> sora(소라) 생성 -> 프로필 저장·과제 생성 -> 새로고침 후에도 유지(localStorage) -> '전환' -> jin(진우) 생성 시 빈 워크스페이스(과제 0개, 소라 과제 미노출) -> 다시 소라로 전환 시 과제·프로필 그대로. 콘솔 에러 없음.
+  - API 직접 확인: 헤더 없음 401, 알 수 없는 사용자 401
+부수 확인(P0-05 실증): 프로필을 화학공학·공정설계로 저장한 뒤 새 과제를 생성하니 '화학·화학공학 · 반응 조건 실험: 유효 데이터 평균'으로 생성됨. "프로필 변경은 새 과제 생성 시 반영된다"는 3차 기록의 결론이 실제 동작으로 확인됨.
+남은 문제 / 다음 작업:
+  1) P0-05 UX 조치 미적용: 현재 프로필과 최근 과제의 profile이 다를 때 홈에 안내 배너 + '새 과제 생성' 버튼을 눈에 띄게 노출 (src/Home.tsx 1파일) 권장.
+  2) /api/github/* 도 학습자 선택 이후에만 접근 가능해짐(fail-closed 의도). 미선택 상태에서도 GitHub 탐색이 필요하면 가드 앞으로 이동 필요.
+  3) PostgreSQL 경로는 코드와 db/001_initial.sql(learning_users 테이블)까지 준비했으나 DATABASE_URL 미설정이라 실제 DB 검증은 못 함. 사용 시 npm run db:migrate 필요.
+  4) 사용자 삭제·이름 변경 UI 없음(생성·전환만).
+사용자 승인 또는 결정이 필요한 사항: 없음(D1·D2로 결정 완료). remote 공개 전에는 docs/MULTI_USER_DESIGN.md 5절 체크리스트를 반드시 완료해야 함.
+```
