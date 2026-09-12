@@ -222,3 +222,18 @@ npm.cmd run dev
   1) 문서 상단 "이번 작업의 기준 커밋"을 실제 HEAD(5b9bece)로 갱신할지 여부 - 이번에는 차이만 기록하고 임의로 덮어쓰지 않음.
   2) 로컬 GitHub MCP 연동(연결된 "github" 서버)이 heurogenesis/Vibe_Lab에 접근 권한이 없어(비공개 저장소이거나 다른 계정 토큰으로 추정) 원격 저장소를 API로 직접 조회하지 못함 - git status/branch -vv로 로컬 클론이 origin과 diff 없이 동기화됨을 확인했으므로 이번 검증 결과에는 영향 없음. 필요 시 토큰 재설정 검토.
 ```
+
+### 2026-09-12 (2차) P0-05 조사 중단 기록 (안전 정지)
+
+```text
+날짜 / 담당 AI: 2026-09-12 / Claude Code
+작업 목적: ROADMAP P0-05(프로필 변경 시 워크스페이스가 안 바뀌는 증상) 원인 조사
+브랜치 / 커밋: feature/mvp-savepoint-20260912 (이 기록 시점 코드 변경 없음, 조사만 진행)
+변경 파일 (1~2개): 없음
+진행 상황: 사용자가 외출 예정 + PC 종료 가능성을 알려와 안전하게 조사를 중단함. 코드 수정 없이 읽기만 했으므로 잃은 작업 없음. 다음 시작 지점을 아래에 남김.
+  - usesPractice(profile) (shared/catalog.ts)은 domain==='data'이거나 personaId가 있거나 resolveDiscipline(profile).id !== 'general'이면 결정론적 44개 실습 카탈로그로 라우팅하고 생성형 AI 경로(generateRules 대신 AI)는 건너뜀.
+  - resolveDiscipline()에서 major 키워드가 하나도 안 맞으면 disciplines[disciplines.length-1]로 폴백하는데, 배열을 직접 열어보니 'general'이 실제로 마지막 원소라서 이 폴백은 general로 정상 귀결됨 - 처음 세웠던 가설(마지막 원소가 general이 아니라 엉뚱한 분야로 빠진다)은 코드 근거가 약함. 기각까지는 아니고 "현재는 근거 부족"으로만 기록.
+  - 브라우저에서 관찰된 기본 화면의 추천 사유가 "전자공학"으로 나온 건, 화면에 보이던 프로필이 shared/schema.ts의 defaultProfile(major='경영학', 미확정 다수)이 아니라 .data/learning.json에 이미 저장돼 있는 이전 세션(GPT/Codex)의 실제 프로필일 가능성이 큼 - 그 저장값에 disciplineId/personaId가 이미 명시돼 있을 수 있음. 다음 조사자는 .data/learning.json의 실제 저장값부터 확인할 것.
+남은 문제 / 다음 작업: 프로필 화면에서 전공·페르소나를 실제로 바꿔가며(예: 화학·화학공학, 다른 personaId) 브라우저에서 추천이 실제로 달라지는지 확인하는 실증 테스트가 아직 수행되지 않음 - 다음 세션에서 이어서 진행.
+사용자 승인 또는 결정이 필요한 사항: 없음. 다음 세션 시작 시 이 기록부터 이어가면 됨.
+```
