@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { type Assignment, type Curriculum, type Profile, styleLabels } from '../shared/schema.js';
+import { CATALOG_VERSION, recommendation, usesPractice } from '../shared/catalog.js';
+import { generatePracticeCurriculum } from './practice-curriculum.js';
 const projects = {
   business: { title: '반복 업무를 줄이는 요청 관리 보드', entity: '업무 요청', fields: '제목, 담당자, 상태', analogy: '부서의 업무 접수대장', scenario: '요청을 등록하고, 진행 상태별로 분류하고, 완료 처리' },
   data: { title: '숫자를 인사이트로 바꾸는 지표 대시보드', entity: '측정 기록', fields: '날짜, 분류, 측정값', analogy: '스프레드시트의 행과 열', scenario: '측정값을 등록하고, 분류별 평균을 계산하고, 필터로 비교' },
   education: { title: '배운 것을 오래 기억하는 학습 카드', entity: '학습 카드', fields: '질문, 답변, 복습 상태', analogy: '과목별로 정리한 학습 노트', scenario: '카드를 등록하고, 답을 가린 채 복습하고, 이해도를 기록' }
 };
 export function generateRules(profile: Profile, previous: Assignment[]): Curriculum {
+  if (usesPractice(profile)) return generatePracticeCurriculum(profile, previous);
   const project = projects[profile.domain];
   const latest = previous[0];
   const needsReview = !!latest?.quizResult && latest.quizResult.score / latest.quizResult.total < 0.67;
@@ -28,5 +31,5 @@ export function generateRules(profile: Profile, previous: Assignment[]): Curricu
     ] };
 }
 export function createAssignment(curriculum: Curriculum, profile: Profile, source: Assignment['source']): Assignment {
-  return { ...curriculum, id: randomUUID(), createdAt: new Date().toISOString(), source, profile: structuredClone(profile), completedSteps: [] };
+  return { ...curriculum, id: randomUUID(), createdAt: new Date().toISOString(), source, profile: structuredClone(profile), completedSteps: [], ...(source === 'rules' && usesPractice(profile) ? { practice: { catalogVersion: CATALOG_VERSION, exerciseIds: recommendation(profile).exerciseIds } } : {}) };
 }

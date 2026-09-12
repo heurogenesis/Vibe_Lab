@@ -1,5 +1,8 @@
 import { z } from 'zod';
 export const profileSchema = z.object({
+  personaId: z.string().trim().min(1).max(80).optional(),
+  disciplineId: z.string().trim().min(1).max(80).optional(),
+  interests: z.array(z.string().trim().min(1).max(80)).max(10).optional(),
   name: z.string().trim().min(1).max(40), major: z.string().trim().min(1).max(80), role: z.string().trim().min(1).max(80),
   level: z.enum(['beginner', 'intermediate', 'advanced']), style: z.enum(['hands-on', 'concept-first', 'guided']),
   domain: z.enum(['business', 'data', 'education']), goal: z.string().trim().min(5).max(500),
@@ -22,10 +25,12 @@ export const curriculumSchema = z.object({
 export type Curriculum = z.infer<typeof curriculumSchema>;
 export type QuizResult = { score: number; total: number; feedback: { correct: boolean; answer: number; explanation: string }[] };
 export type Submission = { url: string; reflection: string; submittedAt: string; evidence: { name: string; defaultBranch: string; pushedAt: string; commit: string | null; commitMessage: string | null; readme: boolean; files: string[]; workflow: string | null; warnings: string[] } };
-export type Assignment = Curriculum & { id: string; createdAt: string; source: 'rules' | 'ai'; profile: Profile; completedSteps: number[]; quizResult?: QuizResult; submission?: Submission };
+export type PracticePlan = { catalogVersion: string; exerciseIds: string[] };
+export type PracticeAttempt = { exerciseId: string; version: string; passed: number; total: number; status: 'passed' | 'failed' | 'error'; dataSourceId: string; recordedAt: string; verification: 'browser-reported' };
+export type Assignment = Curriculum & { id: string; createdAt: string; source: 'rules' | 'ai'; profile: Profile; completedSteps: number[]; quizResult?: QuizResult; submission?: Submission; practice?: PracticePlan; practiceAttempts?: PracticeAttempt[] };
 export type PublicAssignment = Omit<Assignment, 'quiz'> & { quiz: { question: string; options: string[] }[] };
 export type Message = { id: string; assignmentId: string; role: 'user' | 'assistant'; content: string; createdAt: string; source?: 'rules' | 'ai' };
-export type LearningState = { profile: Profile | null; assignments: Assignment[]; messages: Message[] };
+export type LearningState = { profile: Profile | null; assignments: Assignment[]; messages: Message[]; practiceHistory?: PracticeAttempt[] };
 export type PublicState = Omit<LearningState, 'assignments'> & { assignments: PublicAssignment[] };
 export type Health = { storage: 'postgresql' | 'demo-file'; ai: boolean; githubAuthenticated: boolean; localOnly: true };
 export type Repository = { fullName: string; description: string; url: string; language: string | null; stars: number; license: string | null; updatedAt: string; isTemplate: boolean };

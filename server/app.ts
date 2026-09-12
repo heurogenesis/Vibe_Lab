@@ -9,11 +9,18 @@ import { createAssignment } from './curriculum.js';
 import { ApiError, GitHubClient, parseRepositoryUrl, repositoryNameSchema } from './github.js';
 import { LearningAI } from './ai.js';
 import type { Store } from './store.js';
+import { CATALOG_VERSION, getExercise } from '../shared/catalog.js';
+import { dataSources } from '../shared/data-sources.js';
+import { sandboxCsp, sandboxHtml } from './sandbox.js';
 function publicAssignment(a: Assignment): PublicAssignment { return { ...a, quiz: a.quiz.map(({ question, options }) => ({ question, options })) }; }
 function findAssignment(assignments: Assignment[], id: string | string[]) { const target = z.string().parse(id); const a = assignments.find(a => a.id === target); if (!a) throw new ApiError(404, '과제를 찾을 수 없습니다.'); return a; }
 export function createApp(store: Store, ai: LearningAI, github: GitHubClient, options: { port?: number; githubAuthenticated?: boolean } = {}) {
   const app = express(); app.disable('x-powered-by');
-  app.use(helmet({ contentSecurityPolicy: { directives: { 'font-src': ["'self'", 'https://fonts.gstatic.com'], 'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'], 'upgrade-insecure-requests': null } } }));
+  app.get('/practice-sandbox.html', (_req,res) => {
+    res.set({ 'Content-Security-Policy': sandboxCsp, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
+    res.type('html').send(sandboxHtml);
+  });
+  app.use(helmet({ contentSecurityPolicy: { directives: { 'font-src': ["'self'", 'https://fonts.gstatic.com'], 'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'], 'connect-src': ["'self'", ...new Set(dataSources.map(s => new URL(s.url).origin))], 'frame-src': ["'self'"], 'upgrade-insecure-requests': null } } }));
   app.use('/api', (req, res, next) => {
     const host = req.hostname;
     if (!['127.0.0.1', 'localhost', '[::1]', '::1'].includes(host)) return res.status(403).json({ error: '로컬 접속만 허용됩니다.' });
@@ -29,6 +36,24 @@ export function createApp(store: Store, ai: LearningAI, github: GitHubClient, op
   app.get('/api/health', async (_req, res) => { await store.read(); res.json({ storage: store.mode, ai: ai.enabled, githubAuthenticated: !!options.githubAuthenticated, localOnly: true }); });
   app.get('/api/state', async (_req, res) => { const state = await store.read(); res.json({ ...state, assignments: state.assignments.map(publicAssignment) }); });
   app.put('/api/profile', async (req, res) => { const profile = profileSchema.parse(req.body); await store.update(state => { state.profile = profile; }); res.json(profile); });
+  app.post('/api/practice/results', async (req, res) => {
+    const body = z.object({ exerciseId: z.string().max(100), version: z.literal(CATALOG_VERSION), passed: z.number().int().min(0), total: z.number().int().min(1).max(20), status: z.enum(['passed','failed','error']), dataSourceId: z.string().max(100), assignmentId: z.string().max(100).optional() }).strict().parse(req.body);
+    const exercise = getExercise(body.exerciseId);
+    if (!exercise || body.total !== exercise.tests.length || body.passed > body.total || (body.status === 'passed') !== (body.passed === body.total)) throw new ApiError(400, '실습 버전 또는 결과 형식이 올바르지 않습니다.');
+    if (body.dataSourceId !== `sample:${exercise.disciplineId}` && !exercise.sourceIds.includes(body.dataSourceId)) throw new ApiError(400, '이 실습에서 지원하지 않는 데이터 출처입니다.');
+    const { assignmentId, ...summary } = body;
+    const record = { ...summary, recordedAt: new Date().toISOString(), verification: 'browser-reported' as const };
+    await store.update(state => {
+      if (!state.profile) throw new ApiError(400, '학습 프로필을 먼저 저장해 주세요.');
+      if (assignmentId) {
+        const assignment = findAssignment(state.assignments, assignmentId);
+        if (assignment.practice?.catalogVersion !== body.version || !assignment.practice.exerciseIds.includes(body.exerciseId)) throw new ApiError(400, '이 과제에 포함되지 않은 실습입니다.');
+        assignment.practiceAttempts = [...(assignment.practiceAttempts || []).filter(a => a.exerciseId !== body.exerciseId), record];
+      }
+      state.practiceHistory = [...(state.practiceHistory || []), record].slice(-100);
+    });
+    res.status(201).json(record);
+  });
   app.post('/api/assignments', expensive, async (_req, res) => {
     const state = await store.read(); if (!state.profile) throw new ApiError(400, '학습 프로필을 먼저 저장해 주세요.');
     if (state.assignments.length >= 100) throw new ApiError(409, '로컬 과제 보관 한도(100개)에 도달했습니다.');
