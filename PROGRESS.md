@@ -237,3 +237,22 @@ npm.cmd run dev
 남은 문제 / 다음 작업: 프로필 화면에서 전공·페르소나를 실제로 바꿔가며(예: 화학·화학공학, 다른 personaId) 브라우저에서 추천이 실제로 달라지는지 확인하는 실증 테스트가 아직 수행되지 않음 - 다음 세션에서 이어서 진행.
 사용자 승인 또는 결정이 필요한 사항: 없음. 다음 세션 시작 시 이 기록부터 이어가면 됨.
 ```
+
+### 2026-09-12 (3차) P0-05 원인 확정 (코드 결함 아님 · UX 문제)
+
+```text
+날짜 / 담당 AI: 2026-09-12 / Claude Code
+작업 목적: ROADMAP P0-05 (프로필을 바꿔도 실습 워크스페이스가 안 바뀌는 증상) 원인 확정
+브랜치 / 커밋: feature/mvp-savepoint-20260912
+변경 파일: 없음 (조사와 기록만 수행)
+확인한 근거:
+  - .data/learning.json의 최상위 profile: major=화학공학, role=공정설계, disciplineId=chemical, personaId=student, interests=[quality]
+  - 반면 assignments[0](2026-09-12 04:22 생성)과 assignments[1](2026-09-11 생성)에 박제된 profile은 둘 다 major=전자공학, role=PM이고 disciplineId/personaId/interests 키가 아예 없음
+  - server/app.ts: PUT /api/profile은 state.profile만 갱신하고 기존 과제는 손대지 않음. 과제는 POST /api/assignments에서만 ai.generate(state.profile, state.assignments)로 생성되고, createAssignment가 그 시점의 프로필을 과제 안에 복사해 고정함(Assignment.profile)
+  - src/App.tsx saveProfile(): PUT 후 토스트("새 맞춤 과제를 생성하면 변경된 배경이 반영됩니다")만 띄우고 home으로 이동, 자동 재생성 없음
+  - src/App.tsx: const active = state.assignments.find(a=>a.id===activeId) || state.assignments[0] -> 워크스페이스는 항상 기존(가장 최근) 과제를 표시
+  - src/Home.tsx: const active = state.assignments[0]. 기본 CTA는 "이어서 실습하기"(기존 과제 열기)이고, 새로 만드는 "새 맞춤 과제"는 목록 제목 옆 작은 text-button이라 발견성이 낮음
+결론: shared/catalog.ts의 usesPractice()/resolveDiscipline() 결함이 아님. 이전 세션의 폴백 가설은 기각. 과제는 설계상 "생성 시점 프로필로 고정되는 이력 데이터"이며, 프로필 변경이 기존 과제에 소급 적용되지 않는 것이 실제 원인. 사용자에게는 "프로필을 바꿨는데 워크스페이스가 그대로"로 보이는 UX·발견성 문제.
+권장 조치(택1): (a) 현재 프로필과 최근 과제의 profile이 다르면 홈에 배너 + "새 과제 생성" 버튼을 눈에 띄게 노출 (src/Home.tsx 1파일), (b) 프로필 저장 직후 새 과제 생성 여부를 묻기, (c) 현행 유지 + 안내 문구만 강화
+남은 문제 / 다음 작업: 사용자 요청으로 다중 사용자(사용자별 아이디) 설계가 우선 진행됨. P0-05 UX 조치는 그 작업과 함께 반영 권장.
+```
