@@ -1,17 +1,10 @@
-// The selected learner travels with every request. This is workspace separation, not authentication: the server
-// trusts it only because it binds to localhost. See docs/MULTI_USER_DESIGN.md before exposing this remotely.
-const USER_KEY = 'vibe-lab.learner';
-function readStoredUser() { try { return localStorage.getItem(USER_KEY) || ''; } catch { return ''; } }
-let currentUserId = readStoredUser();
-export function getUserId() { return currentUserId; }
-export function setUserId(id: string) {
-  currentUserId = id;
-  try { if (id) localStorage.setItem(USER_KEY, id); else localStorage.removeItem(USER_KEY); } catch { /* private browsing: keep it in memory only */ }
-}
+// Who the request belongs to is carried by the session cookie, which the browser attaches on its own
+// (same-origin). The client never holds an identifier of its own. See docs/MULTI_USER_DESIGN.md.
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   let response: Response;
-  try { response = await fetch('/api' + path, { ...options, headers: { 'Content-Type': 'application/json', 'X-Vibe-Lab': '1', ...(currentUserId ? { 'X-Vibe-User': currentUserId } : {}), ...options?.headers } }); }
+  try { response = await fetch('/api' + path, { ...options, headers: { 'Content-Type': 'application/json', 'X-Vibe-Lab': '1', ...options?.headers } }); }
   catch { throw new Error('서버에 연결할 수 없습니다. 서버 실행 상태를 확인해 주세요.'); }
+  if (response.status === 204) return undefined as T;
   const data = await response.json().catch(() => null);
   if (!response.ok) throw new Error(data?.error || `요청에 실패했습니다 (${response.status}).`);
   if (data === null) throw new Error('서버의 응답 형식이 올바르지 않습니다.');

@@ -28,3 +28,4 @@
 .library-search { display: flex; align-items: center; gap: 8px; }
 .library-search input { min-width: 0; }
 @media (max-width: 800px) { .library-filters { grid-template-columns: 1fr; } .code-editor { font-size: 12px; } }
+.availability{display:inline-flex;align-items:center;gap:6px;font-size:12px}.availability.ok{color:#4e683f}.availability.taken{color:#933e2b}

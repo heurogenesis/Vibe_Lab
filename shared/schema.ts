@@ -38,11 +38,21 @@ export const defaultProfile: Profile = { name: '학습자', major: '경영학', 
 export const levelLabels = { beginner: '입문', intermediate: '기초 경험 있음', advanced: '개발 경험 있음' };
 export const styleLabels = { 'hands-on': '직접 만들며 배우기', 'concept-first': '원리를 먼저 이해하기', guided: '단계별 안내 따라가기' };
 export const domainLabels = { business: '업무 자동화', data: '데이터 활용', education: '교육·학습' };
-// Multi-user layer. The single-learner state above is unchanged; the directory below wraps it so remote
-// authentication can replace the identity source later without another storage migration.
+// Accounts layer. The single-learner state above is unchanged; accounts wrap it so every learner gets an
+// isolated workspace, and the session decides which one a request may touch.
 // See docs/MULTI_USER_DESIGN.md.
-export const STORE_VERSION = 2;
-export const userHandleSchema = z.string().trim().min(2).max(24).regex(/^[a-z0-9][a-z0-9_-]*$/i, '영문, 숫자, 하이픈(-), 밑줄(_)만 사용할 수 있어요.');
-export const createUserSchema = z.object({ handle: userHandleSchema, displayName: z.string().trim().min(1).max(40) }).strict();
+export const STORE_VERSION = 3;
+// An account id is 7-24 characters and must mix letters and digits, so it never reads like a display nickname.
+export const userHandleSchema = z.string().trim()
+  .min(7, '아이디는 7자 이상이어야 해요.').max(24, '아이디는 24자까지 쓸 수 있어요.')
+  .regex(/^[A-Za-z0-9]+$/, '아이디는 영문과 숫자만 사용할 수 있어요.')
+  .regex(/[A-Za-z]/, '아이디에 영문을 포함해 주세요.')
+  .regex(/[0-9]/, '아이디에 숫자를 포함해 주세요.');
+export const passwordSchema = z.string().min(8, '비밀번호는 8자 이상이어야 해요.').max(128);
+export const nicknameSchema = z.string().trim().min(1, '닉네임을 입력해 주세요.').max(40);
+export const signupSchema = z.object({ handle: userHandleSchema, password: passwordSchema, displayName: nicknameSchema }).strict();
+export const loginSchema = z.object({ handle: z.string().trim().min(1).max(24), password: z.string().min(1).max(128) }).strict();
 export type User = { id: string; handle: string; displayName: string; createdAt: string };
-export type MultiUserState = { version: number; users: User[]; workspaces: Record<string, LearningState> };
+// Never leaves the server. The public User above is the only shape the client ever receives.
+export type StoredUser = User & { passwordHash: string };
+export type MultiUserState = { version: number; users: StoredUser[]; workspaces: Record<string, LearningState> };

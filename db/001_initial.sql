@@ -14,5 +14,6 @@ CREATE TABLE IF NOT EXISTS learning_users (
   id TEXT PRIMARY KEY,
   handle TEXT UNIQUE NOT NULL,
   display_name TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

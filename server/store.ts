@@ -2,22 +2,26 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
-import { STORE_VERSION, type LearningState, type MultiUserState, type User } from '../shared/schema.js';
+import { STORE_VERSION, type LearningState, type MultiUserState, type StoredUser, type User } from '../shared/schema.js';
 export const emptyState = (): LearningState => ({ profile: null, assignments: [], messages: [] });
 export const emptyDirectory = (): MultiUserState => ({ version: STORE_VERSION, users: [], workspaces: {} });
 export class UnknownUserError extends Error { constructor() { super('알 수 없는 사용자입니다.'); this.name = 'UnknownUserError'; } }
 export class DuplicateHandleError extends Error { constructor() { super('이미 사용 중인 아이디입니다.'); this.name = 'DuplicateHandleError'; } }
 const normalizeHandle = (handle: string) => handle.trim().toLowerCase();
+// Password hashes stay inside the store. Everything that leaves it is the public shape.
+const toPublic = ({ id, handle, displayName, createdAt }: StoredUser): User => ({ id, handle, displayName, createdAt });
 // One learner's workspace. Route handlers only ever receive this, so they stay unaware of who the learner is.
 export interface Store { mode: 'postgresql' | 'demo-file'; read(): Promise<LearningState>; update<T>(mutate: (state: LearningState) => T): Promise<T>; close(): Promise<void> }
 // The user directory plus a way to scope a Store to one of them. Identity is resolved in server/identity.ts and
 // never here: this layer trusts the userId it is handed. See docs/MULTI_USER_DESIGN.md.
 export interface UserStore {
   mode: 'postgresql' | 'demo-file';
-  listUsers(): Promise<User[]>;
+  countUsers(): Promise<number>;
   findUser(userId: string): Promise<User | null>;
-  findByHandle(handle: string): Promise<User | null>;
-  createUser(input: { handle: string; displayName: string }): Promise<User>;
+  isHandleTaken(handle: string): Promise<boolean>;
+  // The only method that exposes a password hash; used by the login strategy and nothing else.
+  findCredentials(handle: string): Promise<StoredUser | null>;
+  createUser(input: { handle: string; displayName: string; passwordHash: string }): Promise<User>;
   forUser(userId: string): Store;
   close(): Promise<void>;
 }
@@ -53,16 +57,18 @@ export class FileUserStore implements UserStore {
     this.queue = operation.catch(() => undefined);
     return operation;
   }
-  listUsers() { return this.run(state => state.users.slice(), false); }
-  findUser(userId: string) { return this.run(state => state.users.find(u => u.id === userId) || null, false); }
-  findByHandle(handle: string) { const wanted = normalizeHandle(handle); return this.run(state => state.users.find(u => u.handle === wanted) || null, false); }
-  createUser(input: { handle: string; displayName: string }) {
+  countUsers() { return this.run(state => state.users.length, false); }
+  findUser(userId: string) { return this.run(state => { const found = state.users.find(u => u.id === userId); return found ? toPublic(found) : null; }, false); }
+  isHandleTaken(handle: string) { const wanted = normalizeHandle(handle); return this.run(state => state.users.some(u => u.handle === wanted), false); }
+  findCredentials(handle: string) { const wanted = normalizeHandle(handle); return this.run(state => state.users.find(u => u.handle === wanted) || null, false); }
+  createUser(input: { handle: string; displayName: string; passwordHash: string }) {
     const handle = normalizeHandle(input.handle);
     return this.run(state => {
+      // The uniqueness check and the insert share one queued operation, so two signups cannot race here.
       if (state.users.some(u => u.handle === handle)) throw new DuplicateHandleError();
-      const user: User = { id: randomUUID(), handle, displayName: input.displayName.trim(), createdAt: new Date().toISOString() };
+      const user: StoredUser = { id: randomUUID(), handle, displayName: input.displayName.trim(), createdAt: new Date().toISOString(), passwordHash: input.passwordHash };
       state.users.push(user); state.workspaces[user.id] = emptyState();
-      return user;
+      return toPublic(user);
     }, true);
   }
   forUser(userId: string): Store {
@@ -84,32 +90,37 @@ export class FileUserStore implements UserStore {
 // One row per learner workspace (id = user id) plus a directory table. A row lock serializes updates across
 // connections without holding a transaction open during external API calls.
 // Requires the learning_users table from db/001_initial.sql; see docs/MULTI_USER_DESIGN.md (S5).
-const toUser = (row: { id: string; handle: string; display_name: string; created_at: string | Date }): User =>
-  ({ id: row.id, handle: row.handle, displayName: row.display_name, createdAt: new Date(row.created_at).toISOString() });
+const toUser = (row: { id: string; handle: string; display_name: string; created_at: string | Date; password_hash?: string }): StoredUser =>
+  ({ id: row.id, handle: row.handle, displayName: row.display_name, createdAt: new Date(row.created_at).toISOString(), passwordHash: row.password_hash || '' });
 export class PostgresUserStore implements UserStore {
   mode = 'postgresql' as const;
   constructor(private pool: Pool) {}
-  async listUsers(): Promise<User[]> {
-    const result = await this.pool.query('SELECT id, handle, display_name, created_at FROM learning_users ORDER BY created_at');
-    return result.rows.map(toUser);
+  async countUsers(): Promise<number> {
+    const result = await this.pool.query('SELECT COUNT(*)::int AS count FROM learning_users');
+    return result.rows[0]?.count ?? 0;
   }
   async findUser(userId: string): Promise<User | null> {
     const result = await this.pool.query('SELECT id, handle, display_name, created_at FROM learning_users WHERE id = $1', [userId]);
+    return result.rows[0] ? toPublic(toUser(result.rows[0])) : null;
+  }
+  async isHandleTaken(handle: string): Promise<boolean> {
+    const result = await this.pool.query('SELECT 1 FROM learning_users WHERE handle = $1', [normalizeHandle(handle)]);
+    return result.rows.length > 0;
+  }
+  async findCredentials(handle: string): Promise<StoredUser | null> {
+    const result = await this.pool.query('SELECT id, handle, display_name, created_at, password_hash FROM learning_users WHERE handle = $1', [normalizeHandle(handle)]);
     return result.rows[0] ? toUser(result.rows[0]) : null;
   }
-  async findByHandle(handle: string): Promise<User | null> {
-    const result = await this.pool.query('SELECT id, handle, display_name, created_at FROM learning_users WHERE handle = $1', [normalizeHandle(handle)]);
-    return result.rows[0] ? toUser(result.rows[0]) : null;
-  }
-  async createUser(input: { handle: string; displayName: string }): Promise<User> {
-    const user: User = { id: randomUUID(), handle: normalizeHandle(input.handle), displayName: input.displayName.trim(), createdAt: new Date().toISOString() };
+  async createUser(input: { handle: string; displayName: string; passwordHash: string }): Promise<User> {
+    const user: StoredUser = { id: randomUUID(), handle: normalizeHandle(input.handle), displayName: input.displayName.trim(), createdAt: new Date().toISOString(), passwordHash: input.passwordHash };
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query('INSERT INTO learning_users (id, handle, display_name, created_at) VALUES ($1, $2, $3, $4)', [user.id, user.handle, user.displayName, user.createdAt]);
+      // The UNIQUE constraint on handle is the real guard: it rejects a duplicate even under concurrent signups.
+      await client.query('INSERT INTO learning_users (id, handle, display_name, password_hash, created_at) VALUES ($1, $2, $3, $4, $5)', [user.id, user.handle, user.displayName, user.passwordHash, user.createdAt]);
       await client.query('INSERT INTO learning_workspaces (id, data) VALUES ($1, $2::jsonb)', [user.id, JSON.stringify(emptyState())]);
       await client.query('COMMIT');
-      return user;
+      return toPublic(user);
     } catch (error) {
       await client.query('ROLLBACK');
       if ((error as { code?: string }).code === '23505') throw new DuplicateHandleError();

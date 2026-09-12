@@ -314,3 +314,61 @@ npm.cmd run dev
     이번에는 화학공학 -> 전자공학 전환 1건만 실제로 확인했습니다.
 사용자 승인 또는 결정이 필요한 사항: 없음
 ```
+
+### 2026-09-12 (6차) 회원가입·로그인 도입 (아이디 + 비밀번호)
+
+```text
+날짜 / 담당 AI: 2026-09-12 / Claude Code
+작업 목적: 사용자 요청으로 인증 방식을 핸들 전용에서 아이디+비밀번호 로그인으로 격상
+브랜치: feature/mvp-savepoint-20260912
+사용자 결정(대화에서 승인): 아이디는 영문+숫자 7자 이상 / 중복확인 절차 / 비밀번호 로그인 / 닉네임은 가입 시 입력 / 오픈소스 최대한 활용
+설계 문서: docs/MULTI_USER_DESIGN.md (전면 개정)
+추가한 의존성 (package.json 변경 - 사용자가 오픈소스 활용을 명시적으로 요청):
+  passport, passport-local, express-session, bcryptjs (+ @types 3종). npm audit 취약점 0건.
+변경 파일:
+  [S1] shared/schema.ts, server/store.ts   - 계정 스키마, v3 저장 구조, passwordHash 보관과 노출 차단
+  [S2] server/auth.ts(신규), server/identity.ts - Passport 로컬 전략, 세션, 가입·로그인·로그아웃·중복확인
+  [S3] server/app.ts, server/index.ts      - 세션·Passport 마운트, 학습 라우트를 인증 가드 뒤로
+  [S4] src/Auth.tsx(신규), src/api.ts      - 로그인·회원가입 화면, 중복확인 버튼, 쿠키 기반 요청
+  [S5] src/App.tsx, src/Profile.tsx, src/styles.css - 세션 부트스트랩, 로그아웃, 프로필의 이름 입력 제거
+  [S6] tests/learning.test.ts, tests/practice.test.ts, tests/postgres.integration.test.ts, db/001_initial.sql
+  [삭제] src/Users.tsx (Auth.tsx로 대체)
+핵심 설계:
+  - 신원 판단은 server/identity.ts의 resolveUser(req) 한 곳. 세션 쿠키 -> Passport -> req.user만 본다.
+    GitHub OAuth 확장 시 server/auth.ts에 전략만 추가하면 되고 store/라우트는 무변경.
+  - UserStore.forUser(userId)가 기존 Store 뷰를 반환하므로 과제·퀴즈·진도·튜터 라우트 로직은 한 줄도 안 바뀜.
+  - 중복 아이디 3중 방어: (1) 화면 - 중복확인 전 가입 버튼 비활성, 아이디 수정 시 확인 결과 초기화
+    (2) 서버 - signup에서 재검사해 409 (3) 저장소 - 파일은 검사·삽입을 한 큐 작업으로, PG는 UNIQUE 제약.
+  - passwordHash는 StoredUser에만 존재하고 저장소를 나가는 값은 전부 toPublic()을 거침.
+  - 로그인 실패 메시지는 아이디/비밀번호를 구분하지 않고, 계정이 없을 때도 더미 해시와 비교해 응답 시간을 균일화.
+중요한 함정(기록용): Passport 기본 내보내기는 프로세스 전역 싱글턴이라 deserializeUser 핸들러가 앱마다 누적됨.
+  테스트에서 두 번째 앱부터 첫 앱의 저장소로 세션을 복원하려다 전부 401이 났고, 앱마다 new passport.Passport()를
+  쓰도록 바꿔 해결. 로컬 단일 서버에서는 드러나지 않는 버그라 테스트가 없었다면 remote 다중 인스턴스에서 터졌을 것.
+검증 명령과 실제 결과:
+  - npm run typecheck: 통과
+  - npm test: 66 passed | 1 skipped(TEST_DATABASE_URL 필요). 신규 'accounts and sessions' 스위트가
+    아이디 규칙(7자 미만/영문만/숫자만 각각 400), 짧은 비밀번호 400, 중복확인 응답, 대소문자 무시 중복 409,
+    미로그인 401, 잘못된 비밀번호 401, 워크스페이스 격리, 로그아웃 후 401과 재로그인 복구를 확인.
+  - npm run build: 통과 (기존 typescript 청크 크기 경고만 유지, 1m16s)
+  - 브라우저(내장 브라우저, http://127.0.0.1:5173) 실제 확인:
+    1) 아이디 'sora' -> 중복확인 -> "아이디는 7자 이상이어야 해요.", 가입 버튼 비활성
+    2) 'soralearner' -> "아이디에 숫자를 포함해 주세요."
+    3) 'sora1234' -> "사용할 수 있는 아이디예요." -> 가입 버튼 활성. 아이디를 수정하면 확인 결과가 즉시 사라짐
+    4) 가입(닉네임 소라) -> 자동 로그인, 사이드바에 '소라 @sora1234 로그아웃'
+    5) document.cookie가 빈 문자열 -> 세션 쿠키가 HttpOnly로 스크립트에 노출되지 않음을 확인
+    6) 새로고침 후에도 로그인 유지, /api/auth/session 200
+    7) 중복확인 'SORA1234' -> 사용 중으로 판정(대소문자 무시). 중복확인을 건너뛴 직접 가입 호출은 409
+    8) 잘못된 비밀번호 로그인 -> 401 "아이디 또는 비밀번호가 올바르지 않습니다."
+    9) 로그아웃 -> 401, 로그인 화면 복귀 -> 재로그인 -> 워크스페이스 복원
+    10) 프로필 화면에 '어떻게 불러드릴까요?' 입력란이 사라졌고, 저장된 profile.name이 가입 닉네임 '소라'로 채워짐
+  - 데이터 마이그레이션: v2 파일이 .data/learning.backup-2026-09-12T13-28-33-230Z.json으로 이동 후 빈 v3로 시작
+남은 문제 / 다음 작업 (docs/MULTI_USER_DESIGN.md 6절):
+  1) 세션 저장소가 메모리라 서버 재시작 시 전원 로그아웃. Postgres 사용 시 connect-pg-simple 등으로 교체 필요.
+  2) SESSION_SECRET 미설정(.env 변경은 승인 대상이라 손대지 않음). 미설정 시 재시작마다 임의 값 생성 + 경고 로그.
+  3) HTTPS 전환 시 cookie.secure=true 필수. 실제 CSRF 토큰도 필요.
+  4) 비밀번호 재설정·계정 삭제 경로 없음. 비밀번호를 잊으면 새 계정을 만들어야 함.
+  5) PostgreSQL 경로는 코드·마이그레이션까지 준비했으나 실제 DB 검증은 미완.
+사용자 승인 또는 결정이 필요한 사항:
+  - 위 2)의 SESSION_SECRET을 .env에 추가할지 여부 (추가하면 재시작해도 로그인이 유지됨).
+  - 비밀번호 재설정을 22일 포트폴리오 범위에 넣을지 여부.
+```

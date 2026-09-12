@@ -4,12 +4,13 @@ import { rateLimit } from 'express-rate-limit';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { z } from 'zod';
-import { createUserSchema, profileSchema, type Assignment, type PublicAssignment, type QuizResult, type Submission } from '../shared/schema.js';
+import { profileSchema, type Assignment, type PublicAssignment, type QuizResult, type Submission } from '../shared/schema.js';
 import { createAssignment } from './curriculum.js';
 import { ApiError, GitHubClient, parseRepositoryUrl, repositoryNameSchema } from './github.js';
 import { LearningAI } from './ai.js';
-import { DuplicateHandleError, type Store, type UserStore } from './store.js';
+import type { Store, UserStore } from './store.js';
 import { resolveUser } from './identity.js';
+import { attachAuth } from './auth.js';
 import { CATALOG_VERSION, getExercise } from '../shared/catalog.js';
 import { dataSources } from '../shared/data-sources.js';
 import { sandboxCsp, sandboxHtml } from './sandbox.js';
@@ -40,18 +41,14 @@ export function createApp(users: UserStore, ai: LearningAI, github: GitHubClient
   });
   app.use('/api', rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.' } }));
   app.use(express.json({ limit: '64kb' }));
+  // Session, Passport and every /api/auth route. Mounted before the guard so signing in is possible.
+  attachAuth(app, users);
   const expensive = rateLimit({ windowMs: 60_000, limit: 12, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: 'AI 요청이 많습니다. 1분 후 다시 시도해 주세요.' } });
-  // Health and the user directory have to work before a learner is chosen, so they sit ahead of the scope guard.
-  app.get('/api/health', async (_req, res) => { await users.listUsers(); res.json({ storage: users.mode, ai: ai.enabled, githubAuthenticated: !!options.githubAuthenticated, localOnly: true }); });
-  app.get('/api/users', async (_req, res) => { res.json(await users.listUsers()); });
-  app.post('/api/users', async (req, res) => {
-    const body = createUserSchema.parse(req.body);
-    try { res.status(201).json(await users.createUser(body)); }
-    catch (error) { if (error instanceof DuplicateHandleError) throw new ApiError(409, error.message); throw error; }
-  });
-  // Everything past this point belongs to exactly one learner. Identity resolution lives in server/identity.ts.
-  app.use('/api', async (req, _res, next) => {
-    try { const user = await resolveUser(req, users); (req as ScopedRequest).workspace = users.forUser(user.id); next(); }
+  // Health answers before anyone signs in, and deliberately exposes no account information.
+  app.get('/api/health', async (_req, res) => { await users.countUsers(); res.json({ storage: users.mode, ai: ai.enabled, githubAuthenticated: !!options.githubAuthenticated, localOnly: true }); });
+  // Everything past this point belongs to exactly one signed-in learner. Identity lives in server/identity.ts.
+  app.use('/api', (req, _res, next) => {
+    try { (req as ScopedRequest).workspace = users.forUser(resolveUser(req).id); next(); }
     catch (error) { next(error); }
   });
   app.get('/api/state', async (req, res) => { const state = await workspaceOf(req).read(); res.json({ ...state, assignments: state.assignments.map(publicAssignment) }); });
