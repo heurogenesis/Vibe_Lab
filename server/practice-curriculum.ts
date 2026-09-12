@@ -7,7 +7,7 @@ import { goalIntents } from '../shared/taxonomy.js';
 // See docs/DATA_ARCHITECTURE.md.
 export function generatePracticeCurriculum(profile: Profile, previous: Assignment[]): Curriculum {
   const plan = recommendation(profile);
-  const { role, goalIntent, language, outputTarget, promptSkill } = profileSignature(profile);
+  const { role, goalIntent, language, outputTarget, promptSkill, environments } = profileSignature(profile);
   const intent = goalIntents.find(g => g.id === goalIntent) || goalIntents[goalIntents.length - 1];
   const lessons = plan.exerciseIds.map(id => getExercise(id)!);
   const latest = previous.find(a => a.practice);
@@ -26,6 +26,7 @@ export function generatePracticeCurriculum(profile: Profile, previous: Assignmen
       promptSkill.coaching,
       language.executable ? `실행과 채점은 ${language.label}로 진행합니다.` : language.note,
       review ? '이전 이해도 결과를 바탕으로 기초 개념을 복습합니다.' : '',
+      `작업 환경은 ${environments.map(e => e.label).join(', ')} 기준으로 안내합니다.`,
       guidance,
     ].filter(Boolean).join(' ').replace(/\s{2,}/g, ' '),
     difficulty, minutes: profile.minutes * lessons.length,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { goalIntents, hasRoleSignal, languages, resolveGoalIntent, resolveRole, roles } from '../shared/taxonomy.js';
+import { environments, goalIntents, hasRoleSignal, languages, resolveGoalIntent, resolveRole, roles } from '../shared/taxonomy.js';
 import { disciplines, listExercises, profileSignature, recommendation, themes } from '../shared/catalog.js';
 import { defaultProfile, type Profile } from '../shared/schema.js';
 import { generateRules } from '../server/curriculum.js';
@@ -66,9 +66,12 @@ describe('profile signature', () => {
   it('stays inside a bounded, enumerable space no matter how many learners exist', () => {
     const possible = new Set<string>();
     for (const d of disciplines) for (const r of roles) for (const t of themes) for (const l of languages) possible.add(`${d.id}:${r.id}:${t.id}:${l.id}`);
+    // Environments are multi-select and presentation-only, so they must not multiply the generated space.
+    expect(environments.length).toBeGreaterThan(0);
     expect(possible.size).toBe(disciplines.length * roles.length * themes.length * languages.length);
-    // Small enough that the whole space can still be generated ahead of time for a few dollars.
-    expect(possible.size).toBeLessThanOrEqual(4000);
+    // The cap is a budget, not a magic number: at roughly 9KB per generated body, the whole space has to stay
+    // under the 100MB conclusion in docs/DATA_ARCHITECTURE.md section 6.
+    expect(possible.size * 9 / 1024).toBeLessThan(100);
     const samples = [
       withProfile({ major: '전자공학', role: '회로 설계' }),
       withProfile({ major: '기계공학', role: '설비 유지보수', level: 'advanced' }),
@@ -131,10 +134,26 @@ describe('vibe coding dimensions', () => {
     expect(curriculum.rationale).toContain('TypeScript');
   });
   it('falls back instead of failing on an unknown id', () => {
-    const signature = profileSignature(withProfile({ languageId: 'cobol', outputTargetId: 'hologram', promptSkillId: 'wizard' }));
+    const signature = profileSignature(withProfile({ languageId: 'cobol', outputTargetId: 'hologram', promptSkillId: 'wizard', environments: ['holodeck'] }));
     expect(signature.language.id).toBe('typescript');
     expect(signature.outputTarget.id).toBe('script');
     expect(signature.promptSkill.id).toBe('some');
+    expect(signature.environments.map(e => e.id)).toEqual(['browser']);
+  });
+  it('offers the languages a vibe coding learner actually meets', () => {
+    expect(languages.map(l => l.id)).toEqual(['typescript', 'javascript', 'python', 'sql', 'r']);
+    // TypeScript is a superset of JavaScript and both run in the same sandbox, so the JavaScript option is a
+    // real choice rather than a label: the practice still executes after the type annotations are removed.
+    expect(languages.filter(l => l.executable).map(l => l.id)).toEqual(['typescript', 'javascript']);
+    expect(languages.find(l => l.id === 'javascript')?.note).toContain('지워도');
+    expect(languages.find(l => l.id === 'sql')?.note).toContain('DB');
+  });
+  it('carries the chosen working environments into the guidance', () => {
+    const spreadsheet = generateRules(withProfile({ major: '화학공학', role: '공정 엔지니어', environments: ['spreadsheet', 'git'] }), []);
+    expect(spreadsheet.rationale).toContain('엑셀');
+    expect(spreadsheet.rationale).toContain('Git');
+    const defaulted = generateRules(withProfile({ major: '화학공학', role: '공정 엔지니어' }), []);
+    expect(defaulted.rationale).toContain('실습 편집기');
   });
   it('closes the last lesson with the output the learner wants', () => {
     const curriculum = generateRules(withProfile({ major: '화학공학', role: '공정 엔지니어', outputTargetId: 'dashboard' }), []);

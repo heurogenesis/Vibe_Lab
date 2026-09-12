@@ -1,6 +1,7 @@
 import type { Profile } from './schema.js';
-import { hasRoleSignal, resolveGoalIntent, resolveLanguage, resolveOutputTarget, resolvePromptSkill, resolveRole,
-  type GoalIntentId, type Language, type OutputTarget, type PromptSkill, type Role } from './taxonomy.js';
+import { hasRoleSignal, resolveEnvironments, resolveGoalIntent, resolveLanguage, resolveOutputTarget,
+  resolvePromptSkill, resolveRole, type Environment, type GoalIntentId, type Language, type OutputTarget,
+  type PromptSkill, type Role } from './taxonomy.js';
 
 // IDs are content identifiers, not database enums. New personas and disciplines are
 // registered here without changing stored profiles or the execution protocol.
@@ -67,7 +68,7 @@ function roleOf(profile: Profile): Role { return resolveRole({ role: profile.rol
 // The learner's own goal sentence is in neither key: it is personal text, applied at render time only.
 export type ProfileSignature = {
   discipline: Discipline; role: Role; themeId: string; language: Language;
-  outputTarget: OutputTarget; promptSkill: PromptSkill;
+  outputTarget: OutputTarget; promptSkill: PromptSkill; environments: Environment[];
   level: Profile['level']; goalIntent: GoalIntentId;
   contentKey: string; renderKey: string;
 };
@@ -81,7 +82,8 @@ export function profileSignature(profile: Profile): ProfileSignature {
   const promptSkill = resolvePromptSkill(profile.promptSkillId);
   // Language belongs in contentKey: a Python lesson body is genuinely different material, not the same body
   // presented differently. Output target, prompt skill, level and style only reshape one body, so they stay out.
-  return { discipline, role, themeId, language, outputTarget, promptSkill, level: profile.level, goalIntent,
+  return { discipline, role, themeId, language, outputTarget, promptSkill,
+    environments: resolveEnvironments(profile.environments), level: profile.level, goalIntent,
     contentKey: `${discipline.id}:${role.id}:${themeId}:${language.id}`,
     renderKey: `${discipline.id}:${role.id}:${themeId}:${language.id}:${outputTarget.id}:${promptSkill.id}:${profile.level}:${goalIntent}:${profile.style}` };
 }

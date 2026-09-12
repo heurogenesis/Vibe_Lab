@@ -112,16 +112,23 @@ export const roleLabels = Object.fromEntries(roles.map(r => [r.id, r.label])) as
 // (Pyodide, roughly 10MB on first load) that this MVP does not ship, so it is honest about what it is for now:
 // prompts, examples and theory come in Python, while the runnable graded practice stays TypeScript. Flipping
 // executable to true later is the only change this table needs. See docs/DATA_ARCHITECTURE.md.
-export type LanguageId = 'typescript' | 'javascript' | 'python';
+export type LanguageId = 'typescript' | 'javascript' | 'python' | 'sql' | 'r';
 export type Language = { id: LanguageId; label: string; executable: boolean; ecosystem: string; note: string };
 export const languages: Language[] = [
   { id: 'typescript', label: 'TypeScript', executable: true, ecosystem: 'Node.js · React · Vitest',
-    note: '브라우저에서 바로 실행하고 테스트로 채점합니다.' },
+    note: '브라우저에서 바로 실행하고 테스트로 채점합니다. JavaScript에 타입 표기를 더한 언어라 JavaScript 문법이 그대로 통합니다.' },
   { id: 'javascript', label: 'JavaScript', executable: true, ecosystem: 'Node.js · 브라우저',
-    note: '타입을 빼고 먼저 익히고 싶을 때 고르세요. 실행과 채점 방식은 같습니다.' },
+    note: '타입 없이 먼저 익히고 싶을 때 고르세요. 빈칸 실습은 TypeScript 형태로 제공되지만 타입 표기를 지워도 그대로 실행되고 채점됩니다.' },
   { id: 'python', label: 'Python', executable: false, ecosystem: 'pandas · matplotlib · Jupyter',
-    note: '프롬프트와 예제를 Python으로 드립니다. 브라우저에서 채점되는 실습은 아직 TypeScript입니다.' },
+    note: '데이터 업무에서 가장 많이 만나는 언어입니다. 프롬프트와 예제를 Python으로 드리고, 브라우저에서 채점되는 실습은 아직 TypeScript입니다.' },
+  { id: 'sql', label: 'SQL', executable: false, ecosystem: 'PostgreSQL · SQLite · BigQuery',
+    note: '데이터가 DB에 있다면 반드시 만나는 언어입니다. 질의문 예제와 프롬프트를 SQL로 드리고, 채점되는 실습은 같은 계산을 함수로 옮겨 확인합니다.' },
+  { id: 'r', label: 'R', executable: false, ecosystem: 'tidyverse · ggplot2 · RStudio',
+    note: '통계와 논문 그래프에 강한 언어입니다. 예제와 프롬프트를 R로 드리고, 채점되는 실습은 아직 TypeScript입니다.' },
 ];
+// The sandbox compiles TypeScript to JavaScript and runs it in a Worker, so only those two execute today.
+// If a second runtime is ever added, SQL is the cheapest one: SQLite compiled to WebAssembly (sql.js) is about
+// 1MB, against roughly 10MB for CPython (Pyodide) and more for R (webR).
 export const defaultLanguage: LanguageId = 'typescript';
 export function resolveLanguage(id?: string): Language {
   return languages.find(l => l.id === id) || languages[0];
@@ -144,6 +151,24 @@ export const outputTargets: OutputTarget[] = [
 ];
 export function resolveOutputTarget(id?: string): OutputTarget {
   return outputTargets.find(t => t.id === id) || outputTargets[0];
+}
+// Where the learner will actually run what they build. Vibe coding rarely happens in one place: the data sits
+// in a spreadsheet, the code gets written in an editor with an assistant, and the result has to survive being
+// re-run tomorrow. Selecting these changes the closing guidance, not the subject matter, so they stay out of
+// contentKey.
+export type EnvironmentId = 'browser' | 'editor' | 'notebook' | 'terminal' | 'spreadsheet' | 'git';
+export type Environment = { id: EnvironmentId; label: string; hint: string };
+export const environments: Environment[] = [
+  { id: 'browser', label: '이 화면의 실습 편집기', hint: '설치 없이 바로 실행하고 채점받습니다.' },
+  { id: 'editor', label: 'VS Code · Cursor 같은 편집기', hint: 'AI 자동완성과 함께 파일을 직접 다룹니다.' },
+  { id: 'notebook', label: 'Jupyter · Colab 노트북', hint: '셀 단위로 실행하며 결과와 설명을 함께 남깁니다.' },
+  { id: 'terminal', label: '터미널 · 셸', hint: '명령 한 줄로 실행하고 결과를 파일로 남깁니다.' },
+  { id: 'spreadsheet', label: '엑셀 · 구글 시트', hint: '데이터가 이미 있는 곳에서 시작하고, 내보내기부터 연결합니다.' },
+  { id: 'git', label: 'Git · GitHub', hint: '바꾼 내용을 기록하고 언제든 되돌릴 수 있게 합니다.' },
+];
+export function resolveEnvironments(ids?: string[]): Environment[] {
+  const chosen = environments.filter(e => ids?.includes(e.id));
+  return chosen.length ? chosen : [environments[0]];
 }
 // How much the learner has worked with an AI coding assistant. This is the dimension that makes the platform
 // about vibe coding rather than about typing code: it changes how much of the prompt is handed over and how

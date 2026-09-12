@@ -12,6 +12,7 @@ export const profileSchema = z.object({
   outputTargetId: z.string().trim().min(1).max(40).optional(),
   promptSkillId: z.string().trim().min(1).max(40).optional(),
   aiTools: z.array(z.string().trim().min(1).max(40)).max(6).optional(),
+  environments: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
   interests: z.array(z.string().trim().min(1).max(80)).max(10).optional(),
   name: z.string().trim().min(1).max(40), major: z.string().trim().min(1).max(80), role: z.string().trim().min(1).max(80),
   level: z.enum(['beginner', 'intermediate', 'advanced']), style: z.enum(['hands-on', 'concept-first', 'guided']),

@@ -470,3 +470,45 @@ npm.cmd run dev
   - 추가한 분야 7종·직무 5종이 목표 사용자층에 맞는지 검토 요청.
   - Python 실행(Pyodide)을 22일 포트폴리오 범위에 넣을지 여부.
 ```
+
+### 2026-09-12 (9차) 학습 언어 5종·작업 환경 6종으로 재설계
+
+```text
+날짜 / 담당 AI: 2026-09-12 / Claude Code
+작업 목적: 바이브 코딩 과정에서 필수적으로 만나는 언어·환경을 선택지에 포함
+브랜치: feature/mvp-savepoint-20260912
+설계 문서: docs/DATA_ARCHITECTURE.md 13절 (신규 추가)
+변경 파일:
+  shared/taxonomy.ts - 언어에 SQL·R 추가(3 -> 5), 작업 환경 6종 신규, TS/JS 관계를 설명에 명시
+  shared/schema.ts - environments 추가
+  shared/catalog.ts - 시그니처에 environments 포함(표현 전용, contentKey에는 미포함)
+  server/practice-curriculum.ts - 선택한 작업 환경을 안내 문구에 반영
+  src/Profile.tsx - 작업 환경 복수 선택 추가
+  tests/taxonomy.test.ts - 언어 구성·환경 반영·폴백 테스트 3개 추가
+사용자 확인 사항 정정: JavaScript는 8차 작업에서 이미 선택지에 포함되어 있었음(프로필 2단계에 노출 중).
+  이번에는 TS가 JS의 상위집합이라는 관계를 화면 설명에 명시하고, JavaScript 선택 시
+  "빈칸 실습은 TypeScript 형태로 제공되지만 타입 표기를 지워도 그대로 실행되고 채점됩니다"를 안내하도록 보강.
+  실제로 compileCode가 ts.transpileModule을 쓰므로 타입 없는 코드도 그대로 실행됨 - 빈 약속이 아님.
+언어 5종과 실행 가능 여부:
+  TypeScript(가능), JavaScript(가능), Python(불가), SQL(불가), R(불가)
+  SQL 선택 시 "질의문 예제와 프롬프트를 SQL로 드리고, 채점되는 실습은 같은 계산을 함수로 옮겨 확인합니다"로 안내.
+  기록: 실행 언어를 하나 더 늘린다면 SQL이 가장 저렴함. sql.js(SQLite WASM) 약 1MB vs Pyodide 약 10MB vs webR 그 이상.
+작업 환경 6종(복수 선택, 표현 전용): 실습 편집기 / VS Code·Cursor / Jupyter·Colab / 터미널·셸 / 엑셀·구글 시트 / Git·GitHub
+조합 공간: contentKey = 17 x 14 x 4 x 5 = 4,760 (약 42MB). 100MB 미만 유지.
+  환경·산출물·AI경험·수준·스타일을 모두 키에 넣었다면 857만 조합이 되어 사전 생성이 불가능해짐.
+  테스트는 상한을 숫자가 아니라 예산으로 검사하도록 변경: 조합 수 x 9KB < 100MB.
+검증 명령과 실제 결과:
+  - npm run typecheck: 통과
+  - npm test: 118 passed | 1 skipped
+  - 브라우저 실측(전공 반도체공학 / 직무 공정 엔지니어 고정):
+      SQL + 엑셀·구글 시트 + Git -> 프롬프트 "...SQL 기준으로 설명해 줘",
+        설명에 "데이터가 DB에 있다면 반드시 만나는 언어입니다... 채점되는 실습은 같은 계산을 함수로 옮겨 확인합니다",
+        "작업 환경은 엑셀 · 구글 시트, Git · GitHub 기준으로 안내합니다"
+      JavaScript + 편집기 + 터미널 -> "실행과 채점은 JavaScript로 진행합니다",
+        "작업 환경은 VS Code · Cursor 같은 편집기, 터미널 · 셸 기준으로 안내합니다"
+남은 문제 / 다음 작업:
+  1) SQL·Python·R은 프롬프트·예제 언어로만 동작. 실행 채점은 TS/JS뿐.
+  2) 실행 언어 확장 시 SQL(sql.js, 약 1MB) 우선 검토 권장.
+  3) 빈칸 실습 코드 자체는 언어별로 달라지지 않음(항상 TS 형태). 언어별 스타터 코드 생성은 미구현.
+사용자 승인 또는 결정이 필요한 사항: SQL 실행(sql.js)을 22일 범위에 넣을지 여부.
+```
