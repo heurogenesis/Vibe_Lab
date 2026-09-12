@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { goalIntents, hasRoleSignal, resolveGoalIntent, resolveRole, roles } from '../shared/taxonomy.js';
-import { disciplines, profileSignature, recommendation, themes } from '../shared/catalog.js';
+import { goalIntents, hasRoleSignal, languages, resolveGoalIntent, resolveRole, roles } from '../shared/taxonomy.js';
+import { disciplines, listExercises, profileSignature, recommendation, themes } from '../shared/catalog.js';
 import { defaultProfile, type Profile } from '../shared/schema.js';
 import { generateRules } from '../server/curriculum.js';
 
@@ -61,13 +61,14 @@ describe('profile signature', () => {
     const signature = profileSignature(withProfile({ major: '화학공학', role: '공정 엔지니어', goal: secret }));
     expect(signature.contentKey).not.toContain('수율');
     expect(signature.renderKey).not.toContain('수율');
-    expect(signature.contentKey.split(':')).toHaveLength(3);
+    expect(signature.contentKey.split(':')).toHaveLength(4);
   });
   it('stays inside a bounded, enumerable space no matter how many learners exist', () => {
     const possible = new Set<string>();
-    for (const d of disciplines) for (const r of roles) for (const t of themes) possible.add(`${d.id}:${r.id}:${t.id}`);
-    expect(possible.size).toBe(disciplines.length * roles.length * themes.length);
-    expect(possible.size).toBeLessThanOrEqual(400);
+    for (const d of disciplines) for (const r of roles) for (const t of themes) for (const l of languages) possible.add(`${d.id}:${r.id}:${t.id}:${l.id}`);
+    expect(possible.size).toBe(disciplines.length * roles.length * themes.length * languages.length);
+    // Small enough that the whole space can still be generated ahead of time for a few dollars.
+    expect(possible.size).toBeLessThanOrEqual(4000);
     const samples = [
       withProfile({ major: '전자공학', role: '회로 설계' }),
       withProfile({ major: '기계공학', role: '설비 유지보수', level: 'advanced' }),
@@ -96,6 +97,54 @@ describe('generated content follows the category, not the wording', () => {
     const plan = recommendation(withProfile({ major: '전자공학', role: '연구개발 및 PM' }));
     expect(plan.discipline.id).toBe('electronics');
     expect(plan.exerciseIds).toContain('project:compare');
+  });
+});
+
+describe('expanding the catalog', () => {
+  it('generates four executable exercises per discipline', () => {
+    expect(listExercises().length).toBe((disciplines.length + 1) * themes.length);
+  });
+  it('keeps the fallback entries last so unmatched input lands there deliberately', () => {
+    expect(disciplines[disciplines.length - 1].id).toBe('general');
+    expect(roles[roles.length - 1].id).toBe('general');
+  });
+  it('routes a business major to its own field rather than the generic fallback', () => {
+    expect(profileSignature(withProfile({ major: '경영학', role: '기획' })).discipline.id).toBe('business');
+    expect(profileSignature(withProfile({ major: '반도체공학', role: '공정' })).discipline.id).toBe('semiconductor');
+    expect(profileSignature(withProfile({ major: '자동차공학', role: '설계' })).discipline.id).toBe('automotive');
+  });
+});
+
+describe('vibe coding dimensions', () => {
+  it('treats the language as part of the material, not as styling', () => {
+    const base = { major: '화학공학', role: '공정 엔지니어' };
+    const ts = profileSignature(withProfile({ ...base, languageId: 'typescript' }));
+    const py = profileSignature(withProfile({ ...base, languageId: 'python' }));
+    expect(ts.contentKey).not.toBe(py.contentKey);
+    expect(py.language.label).toBe('Python');
+  });
+  it('is honest about which languages the sandbox can actually run', () => {
+    expect(languages.find(l => l.id === 'typescript')?.executable).toBe(true);
+    expect(languages.find(l => l.id === 'python')?.executable).toBe(false);
+    // A learner who picked Python must be told the graded run is still TypeScript.
+    const curriculum = generateRules(withProfile({ major: '화학공학', role: '공정 엔지니어', languageId: 'python' }), []);
+    expect(curriculum.rationale).toContain('TypeScript');
+  });
+  it('falls back instead of failing on an unknown id', () => {
+    const signature = profileSignature(withProfile({ languageId: 'cobol', outputTargetId: 'hologram', promptSkillId: 'wizard' }));
+    expect(signature.language.id).toBe('typescript');
+    expect(signature.outputTarget.id).toBe('script');
+    expect(signature.promptSkill.id).toBe('some');
+  });
+  it('closes the last lesson with the output the learner wants', () => {
+    const curriculum = generateRules(withProfile({ major: '화학공학', role: '공정 엔지니어', outputTargetId: 'dashboard' }), []);
+    expect(curriculum.lessons[curriculum.lessons.length - 1].experiment).toContain('대시보드');
+    expect(curriculum.lessons[0].experiment).not.toContain('대시보드');
+  });
+  it('adapts the coaching to how much AI the learner has used', () => {
+    const novice = generateRules(withProfile({ major: '화학공학', role: '공정 엔지니어', promptSkillId: 'none' }), []);
+    const fluent = generateRules(withProfile({ major: '화학공학', role: '공정 엔지니어', promptSkillId: 'fluent' }), []);
+    expect(novice.rationale).not.toBe(fluent.rationale);
   });
 });
 

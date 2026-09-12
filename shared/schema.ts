@@ -6,6 +6,12 @@ export const profileSchema = z.object({
   disciplineId: z.string().trim().min(1).max(80).optional(),
   // Explicit override for the role classified from the free-text job title. See shared/taxonomy.ts.
   roleId: z.string().trim().min(1).max(80).optional(),
+  // Vibe coding dimensions. Open strings like every other content id: unknown values resolve to a default
+  // rather than failing validation, so a new language or output target ships without a migration.
+  languageId: z.string().trim().min(1).max(40).optional(),
+  outputTargetId: z.string().trim().min(1).max(40).optional(),
+  promptSkillId: z.string().trim().min(1).max(40).optional(),
+  aiTools: z.array(z.string().trim().min(1).max(40)).max(6).optional(),
   interests: z.array(z.string().trim().min(1).max(80)).max(10).optional(),
   name: z.string().trim().min(1).max(40), major: z.string().trim().min(1).max(80), role: z.string().trim().min(1).max(80),
   level: z.enum(['beginner', 'intermediate', 'advanced']), style: z.enum(['hands-on', 'concept-first', 'guided']),

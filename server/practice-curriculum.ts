@@ -7,7 +7,7 @@ import { goalIntents } from '../shared/taxonomy.js';
 // See docs/DATA_ARCHITECTURE.md.
 export function generatePracticeCurriculum(profile: Profile, previous: Assignment[]): Curriculum {
   const plan = recommendation(profile);
-  const { role, goalIntent } = profileSignature(profile);
+  const { role, goalIntent, language, outputTarget, promptSkill } = profileSignature(profile);
   const intent = goalIntents.find(g => g.id === goalIntent) || goalIntents[goalIntents.length - 1];
   const lessons = plan.exerciseIds.map(id => getExercise(id)!);
   const latest = previous.find(a => a.practice);
@@ -17,17 +17,26 @@ export function generatePracticeCurriculum(profile: Profile, previous: Assignmen
   const guidance = difficulty === 'beginner' ? '빈칸을 하나씩 채우고, 각 테스트가 확인하는 조건을 설명합니다.' : '빈칸을 완성한 후 함수를 직접 재구성하고, 경계 조건 테스트를 추가할 사례를 설명합니다.';
   return {
     title: `${plan.discipline.label} · ${lessons[0].title}`,
-    summary: `${role.label} 관점에서 ${role.subject}을 TypeScript 함수로 다룹니다. ${lessons.map(l => l.title).join(' → ')}. ${intent.framing}`,
-    rationale: `${plan.reason} ${review ? '이전 이해도 결과를 바탕으로 기초 개념을 복습합니다.' : ''} ${guidance}`,
+    summary: `${role.label} 관점에서 ${role.subject}을 다룹니다. ${lessons.map(l => l.title).join(' → ')}. ${intent.framing}`,
+    // Never claim the practice runs in a language the sandbox cannot execute: a Python learner is told plainly
+    // that the prompts come in Python while the graded run stays TypeScript. Built from parts so an empty
+    // segment does not leave a double space in the sentence the learner reads.
+    rationale: [
+      plan.reason,
+      promptSkill.coaching,
+      language.executable ? `실행과 채점은 ${language.label}로 진행합니다.` : language.note,
+      review ? '이전 이해도 결과를 바탕으로 기초 개념을 복습합니다.' : '',
+      guidance,
+    ].filter(Boolean).join(' ').replace(/\s{2,}/g, ' '),
     difficulty, minutes: profile.minutes * lessons.length,
     concepts: ['TypeScript 함수', '데이터 계약', '누락값과 경계 조건', '자동 테스트', '그룹별 집계', '비동기 처리'],
-    lessons: lessons.map(exercise => ({
+    lessons: lessons.map((exercise, index) => ({
       title: exercise.title,
       description: `${exercise.objective} ${role.subject}에서 이 계산이 틀리면 ${role.decision} 판단이 함께 흔들립니다.`,
       objective: `${exercise.objective} ${guidance}`,
-      prompt: `${exercise.contract}\n정답을 먼저 제시하지 말고, ${plan.discipline.label} 분야의 ${role.label} 관점에서 필요한 개념과 작은 힌트만 설명해 줘.`,
+      prompt: `${exercise.contract}\n정답을 먼저 제시하지 말고, ${plan.discipline.label} 분야의 ${role.label} 관점에서 필요한 개념과 작은 힌트만 ${language.label} 기준으로 설명해 줘.`,
       theory: exercise.theory,
-      experiment: `합성 샘플로 실행하고 테스트의 기대값과 실제값을 비교하세요. 값을 일부러 누락시키거나 범위 밖으로 바꾸면 ${role.metric}이 어떻게 달라지는지 확인하세요. 코드나 데이터를 바꾼 뒤에는 다시 실행해야 합니다.`,
+      experiment: `합성 샘플로 실행하고 테스트의 기대값과 실제값을 비교하세요. 값을 일부러 누락시키거나 범위 밖으로 바꾸면 ${role.metric}이 어떻게 달라지는지 확인하세요. 코드나 데이터를 바꾼 뒤에는 다시 실행해야 합니다.${index === lessons.length - 1 ? ` 마지막으로, 만들고 싶은 결과물(${outputTarget.label})을 떠올리며 ${outputTarget.closing}` : ''}`,
       checks: ['브라우저에서 코드를 실행하고 테스트 결과를 확인했다', '실패한 조건과 수정한 이유를 설명할 수 있다', `이 계산이 ${role.metric}과 어떻게 연결되는지 설명할 수 있다`, '테스트 통과가 모든 업무 데이터에 대한 정확성을 보장하지 않음을 이해했다'],
     })),
     quiz: [

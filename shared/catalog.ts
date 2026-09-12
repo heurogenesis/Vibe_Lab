@@ -1,5 +1,6 @@
 import type { Profile } from './schema.js';
-import { hasRoleSignal, resolveGoalIntent, resolveRole, type GoalIntentId, type Role } from './taxonomy.js';
+import { hasRoleSignal, resolveGoalIntent, resolveLanguage, resolveOutputTarget, resolvePromptSkill, resolveRole,
+  type GoalIntentId, type Language, type OutputTarget, type PromptSkill, type Role } from './taxonomy.js';
 
 // IDs are content identifiers, not database enums. New personas and disciplines are
 // registered here without changing stored profiles or the execution protocol.
@@ -23,7 +24,7 @@ export type Discipline = {
 };
 export const disciplines: Discipline[] = [
   { id: 'electronics', label: '전기·전자', keywords: ['전자','전기','electrical','electronic'], subject: '센서 측정 로그', measurement: '전압', unit: 'V', min: 0, max: 3.3, groups: ['센서 A','센서 B'], context: '센서별 측정값을 정제하고 허용 범위와 비교합니다.' },
-  { id: 'mechanical', label: '기계·항공', keywords: ['기계','항공','자동차','mechanical','aerospace'], subject: '회전 장비 시험', measurement: '진동 속도', unit: 'mm/s', min: 0, max: 10, groups: ['장비 A','장비 B'], context: '장비 시험 조건별 진동 기록을 비교합니다.' },
+  { id: 'mechanical', label: '기계·항공', keywords: ['기계','항공','mechanical','aerospace'], subject: '회전 장비 시험', measurement: '진동 속도', unit: 'mm/s', min: 0, max: 10, groups: ['장비 A','장비 B'], context: '장비 시험 조건별 진동 기록을 비교합니다.' },
   { id: 'chemical', label: '화학·화학공학', keywords: ['화학','화공','chemical','chemistry'], subject: '반응 조건 실험', measurement: '수율', unit: '%', min: 0, max: 100, groups: ['조건 A','조건 B'], context: '반응 조건별 수율을 정리하고 누락된 실험을 구분합니다.' },
   { id: 'materials', label: '재료·신소재', keywords: ['재료','신소재','금속','material'], subject: '소재 인장 시험', measurement: '인장 강도', unit: 'MPa', min: 0, max: 1000, groups: ['소재 A','소재 B'], context: '소재별 시험 결과를 집계하고 측정 범위를 확인합니다.' },
   { id: 'civil', label: '토목·건축', keywords: ['토목','건축','civil','architect'], subject: '구조물 변위 관측', measurement: '변위', unit: 'mm', min: -20, max: 20, groups: ['지점 A','지점 B'], context: '관측 지점별 부호가 있는 변위 데이터를 비교합니다.' },
@@ -31,6 +32,13 @@ export const disciplines: Discipline[] = [
   { id: 'life', label: '생명·바이오', keywords: ['생명','생물','바이오','bio','life'], subject: '생물 표본 측정', measurement: '질량', unit: 'g', min: 0, max: 10000, groups: ['종 A','종 B'], context: '표본 그룹별 질량을 집계하고 공개 생태 데이터를 함께 탐색합니다.' },
   { id: 'software', label: '컴퓨터·정보통신', keywords: ['컴퓨터','소프트웨어','정보','통신','computer','software'], subject: '서비스 응답 로그', measurement: '응답 시간', unit: 'ms', min: 0, max: 5000, groups: ['API A','API B'], context: '서비스별 응답 시간과 실패한 요청을 분리해 분석합니다.' },
   { id: 'science', label: '물리·수학·통계', keywords: ['물리','수학','통계','physics','math','statistic'], subject: '반복 측정 실험', measurement: '기준 대비 오차', unit: 'a.u.', min: -5, max: 5, groups: ['조건 A','조건 B'], context: '반복 측정의 부호 있는 오차와 조건별 평균을 비교합니다.' },
+  { id: 'semiconductor', label: '반도체·디스플레이', keywords: ['반도체','디스플레이','웨이퍼','tft','포토','식각','semiconductor','display'], subject: '웨이퍼 계측 로그', measurement: '막 두께', unit: 'nm', min: 0, max: 500, groups: ['로트 A','로트 B'], context: '로트별 계측값의 산포를 비교하고 측정 실패를 구분합니다.' },
+  { id: 'automotive', label: '자동차·모빌리티', keywords: ['자동차','모빌리티','차량','완성차','automotive','vehicle'], subject: '주행 시험 로그', measurement: '연비', unit: 'km/L', min: 0, max: 30, groups: ['차량 A','차량 B'], context: '주행 조건별 연비 기록을 비교합니다.' },
+  { id: 'industrial', label: '산업·시스템공학', keywords: ['산업공학','시스템공학','물류','생산관리','최적화','industrial'], subject: '작업 시간 기록', measurement: '사이클 타임', unit: '초', min: 0, max: 600, groups: ['라인 A','라인 B'], context: '공정 단계별 소요 시간과 결측 구간을 정리합니다.' },
+  { id: 'biomedical', label: '의공학·헬스케어', keywords: ['의공학','의료','헬스케어','재활','biomedical','medical'], subject: '생체 신호 기록', measurement: '심박수', unit: 'bpm', min: 30, max: 200, groups: ['피험자 A','피험자 B'], context: '합성 샘플에서 잡음과 결측을 구분합니다. 실제 진단이나 의학적 판단에 사용하지 않습니다.' },
+  { id: 'agrifood', label: '식품·농업', keywords: ['식품','농업','축산','원예','발효','agri','food'], subject: '품질 검사 기록', measurement: '당도', unit: 'Brix', min: 0, max: 30, groups: ['농장 A','농장 B'], context: '수확 배치별 품질 편차를 확인합니다.' },
+  { id: 'marine', label: '해양·조선', keywords: ['해양','조선','선박','항만','marine','naval'], subject: '운항 계측 기록', measurement: '선속', unit: 'knot', min: 0, max: 40, groups: ['항로 A','항로 B'], context: '항로별 운항 기록에서 결측 구간을 정리합니다.' },
+  { id: 'business', label: '경영·경제', keywords: ['경영','경제','회계','마케팅','물류관리','business','economics'], subject: '운영 지표 기록', measurement: '일 매출', unit: '만원', min: 0, max: 5000, groups: ['지점 A','지점 B'], context: '지점별 운영 지표에서 누락과 이상값을 구분합니다.' },
   { id: 'general', label: '융합·기타 분야', keywords: [], subject: '업무 측정 데이터', measurement: '측정값', unit: 'a.u.', min: -100, max: 100, groups: ['그룹 A','그룹 B'], context: '다양한 분야에 적용할 수 있는 데이터 정제와 집계를 학습합니다.' },
 ];
 export const projectDiscipline: Discipline = { id: 'project', label: '프로젝트·생산 운영', keywords: [], subject: '프로젝트 작업 기록', measurement: '작업 소요 시간', unit: '시간', min: 0, max: 160, groups: ['프로젝트 A','프로젝트 B'], context: '프로젝트별 작업 시간을 비교합니다. 작업 시간 평균을 완료율이나 생산성으로 해석하지 않습니다.' };
@@ -58,7 +66,8 @@ function roleOf(profile: Profile): Role { return resolveRole({ role: profile.rol
 // including them would multiply the cache and the generation cost by 45 without changing the subject matter.
 // The learner's own goal sentence is in neither key: it is personal text, applied at render time only.
 export type ProfileSignature = {
-  discipline: Discipline; role: Role; themeId: string;
+  discipline: Discipline; role: Role; themeId: string; language: Language;
+  outputTarget: OutputTarget; promptSkill: PromptSkill;
   level: Profile['level']; goalIntent: GoalIntentId;
   contentKey: string; renderKey: string;
 };
@@ -67,9 +76,14 @@ export function profileSignature(profile: Profile): ProfileSignature {
   const role = roleOf(profile);
   const themeId = preferredThemes(profile)[0];
   const goalIntent = resolveGoalIntent(profile.goal).id;
-  return { discipline, role, themeId, level: profile.level, goalIntent,
-    contentKey: `${discipline.id}:${role.id}:${themeId}`,
-    renderKey: `${discipline.id}:${role.id}:${themeId}:${profile.level}:${goalIntent}:${profile.style}` };
+  const language = resolveLanguage(profile.languageId);
+  const outputTarget = resolveOutputTarget(profile.outputTargetId);
+  const promptSkill = resolvePromptSkill(profile.promptSkillId);
+  // Language belongs in contentKey: a Python lesson body is genuinely different material, not the same body
+  // presented differently. Output target, prompt skill, level and style only reshape one body, so they stay out.
+  return { discipline, role, themeId, language, outputTarget, promptSkill, level: profile.level, goalIntent,
+    contentKey: `${discipline.id}:${role.id}:${themeId}:${language.id}`,
+    renderKey: `${discipline.id}:${role.id}:${themeId}:${language.id}:${outputTarget.id}:${promptSkill.id}:${profile.level}:${goalIntent}:${profile.style}` };
 }
 export function recommendation(profile: Profile) {
   const d = resolveDiscipline(profile);

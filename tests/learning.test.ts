@@ -10,6 +10,9 @@ import { GitHubClient, parseRepositoryUrl } from '../server/github.js';
 import { createAssignment, generateRules } from '../server/curriculum.js';
 import { FileUserStore, PostgresUserStore } from '../server/store.js';
 import { curriculumSchema, defaultProfile, type Profile, type PublicAssignment } from '../shared/schema.js';
+// 경영학 is a real discipline since 2026-09-12, which routes to the executable practice catalog.
+// Tests that need the project/AI path use a major no discipline claims, so the routing is stated, not assumed.
+const projectProfile = { ...defaultProfile, major: '융합 전공' };
 const folders: string[] = [];
 afterEach(async()=> { for (const folder of folders.splice(0)) await rm(folder,{recursive:true,force:true}); });
 async function setup() {
@@ -27,7 +30,7 @@ describe('learner workflow via HTTP',()=> {
   it('persists profile → curriculum → progress → quiz → tutor, without leaking quiz answers',async()=> {
     const {agent,store,userId} = await setup();
     await agent.post('/api/assignments').set('X-Vibe-Lab','1').send({}).expect(400);
-    await agent.put('/api/profile').set('X-Vibe-Lab','1').send(defaultProfile).expect(200);
+    await agent.put('/api/profile').set('X-Vibe-Lab','1').send(projectProfile).expect(200);
     const created = await agent.post('/api/assignments').set('X-Vibe-Lab','1').send({}).expect(201);
     const a = created.body as PublicAssignment;
     expect(a.lessons).toHaveLength(4); expect(a.quiz[0]).not.toHaveProperty('answer');
@@ -44,7 +47,7 @@ describe('learner workflow via HTTP',()=> {
     const state = (await agent.get('/api/state').expect(200)).body;
     expect(state.assignments[0].quizResult.score).toBe(3); expect(state.messages).toHaveLength(2);
     const reopened = new FileUserStore(join(folders[0],'state.json'));
-    expect((await reopened.forUser(userId).read()).profile?.major).toBe('경영학');
+    expect((await reopened.forUser(userId).read()).profile?.major).toBe('융합 전공');
   });
   it('rejects invalid profiles, foreign origins and missing request headers',async()=> {
     const {agent,app}=await setup();
@@ -86,12 +89,12 @@ describe('adaptive curriculum',()=> {
     }
   });
   it('changes domain content and adapts the next task based on actual assessment',()=> {
-    const first=createAssignment(generateRules(defaultProfile,[]),defaultProfile,'rules');
-    expect(generateRules({...defaultProfile,domain:'data'},[]).title).not.toBe(first.title);
+    const first=createAssignment(generateRules(projectProfile,[]),projectProfile,'rules');
+    expect(generateRules({...projectProfile,domain:'data'},[]).title).not.toBe(first.title);
     first.completedSteps=[0,1,2,3];first.quizResult={score:3,total:3,feedback:[]};
-    expect(generateRules(defaultProfile,[first]).difficulty).toBe('intermediate');
+    expect(generateRules(projectProfile,[first]).difficulty).toBe('intermediate');
     first.quizResult={score:1,total:3,feedback:[]};
-    expect(generateRules({...defaultProfile,level:'advanced'},[first]).difficulty).toBe('beginner');
+    expect(generateRules({...projectProfile,level:'advanced'},[first]).difficulty).toBe('beginner');
   });
 });
 describe('PostgreSQL persistence contract (pg-mem)',()=> {
@@ -106,8 +109,8 @@ describe('PostgreSQL persistence contract (pg-mem)',()=> {
     const users=new PostgresUserStore(new Pool());
     const learner=await users.createUser({handle:'pgtester1',displayName:'PG',passwordHash:'not-used-here'});
     const store=users.forUser(learner.id);
-    await store.update(s=>{s.profile=defaultProfile;s.assignments.push(createAssignment(generateRules(defaultProfile,[]),defaultProfile,'rules'));});
-    const loaded=await store.read();expect(loaded.profile).toEqual(defaultProfile);expect(loaded.assignments[0].lessons).toHaveLength(4);
+    await store.update(s=>{s.profile=projectProfile;s.assignments.push(createAssignment(generateRules(projectProfile,[]),projectProfile,'rules'));});
+    const loaded=await store.read();expect(loaded.profile).toEqual(projectProfile);expect(loaded.assignments[0].lessons).toHaveLength(4);
     db.public.none(sql);expect((await store.read()).assignments).toHaveLength(1);
     await users.close();
   });

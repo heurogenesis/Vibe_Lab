@@ -9,7 +9,8 @@
 // about, and the raw sentence is only ever used as display text for its own author. That keeps the number of
 // distinct content combinations finite (and therefore cacheable) no matter how many learners sign up.
 // See docs/DATA_ARCHITECTURE.md for the resulting cache design.
-export type RoleId = 'research' | 'design' | 'process' | 'quality' | 'planning' | 'operation' | 'student' | 'teaching' | 'general';
+export type RoleId = 'research' | 'design' | 'process' | 'quality' | 'planning' | 'operation' | 'student' | 'teaching'
+  | 'data' | 'safety' | 'software' | 'founder' | 'admin' | 'general';
 export type GoalIntentId = 'automate' | 'analyze' | 'report' | 'clean' | 'understand';
 // What a role actually changes: the data it looks at, the number it cares about, and the decision it supports.
 // Content generation reads these fields instead of interpolating the learner's own job title into a sentence.
@@ -34,6 +35,16 @@ export const roles: Role[] = [
     subject: '수업·실험 과제 데이터', metric: '결과를 설명할 수 있는 정도', decision: '리포트에 어떤 결론을 쓸지', themeBias: ['clean', 'compare', 'quality'] },
   { id: 'teaching', label: '교육·강의', keywords: ['교육', '강의', '강사', '교사', '튜터', 'teaching', 'instructor'],
     subject: '학습 활동 기록', metric: '이해도 분포', decision: '다음 수업에서 무엇을 다룰지', themeBias: ['compare', 'clean', 'quality'] },
+  { id: 'data', label: '데이터·분석', keywords: ['데이터', '분석가', '데이터분석', 'analyst', '머신러닝', 'ml', '인공지능'],
+    subject: '수집한 원자료', metric: '지표의 안정성', decision: '어떤 지표를 보고할지', themeBias: ['clean', 'compare', 'async'] },
+  { id: 'safety', label: '안전·환경', keywords: ['안전', '환경', '보건', '방재', 'ehs', 'safety'],
+    subject: '점검·측정 기록', metric: '기준 초과 건수', decision: '작업을 멈출지', themeBias: ['quality', 'clean', 'compare'] },
+  { id: 'software', label: '개발·IT', keywords: ['개발자', '소프트웨어', '프로그래머', '백엔드', '프론트', 'developer', 'software'],
+    subject: '서비스 로그와 지표', metric: '오류율과 지연', decision: '배포를 진행할지', themeBias: ['async', 'clean', 'compare'] },
+  { id: 'founder', label: '창업·1인 운영', keywords: ['창업', '대표', '자영업', '프리랜서', '1인', 'founder', 'startup'],
+    subject: '매출·고객 기록', metric: '반복 구매와 이탈', decision: '어디에 시간을 쓸지', themeBias: ['compare', 'clean', 'quality'] },
+  { id: 'admin', label: '사무·운영지원', keywords: ['사무', '총무', '인사', '경리', '행정', '지원', 'admin'],
+    subject: '업무 접수 기록', metric: '처리 건수와 대기 시간', decision: '어느 단계를 자동화할지', themeBias: ['clean', 'compare', 'async'] },
   // Fallback. Kept last so an unmatched role lands here deliberately rather than by accident.
   { id: 'general', label: '기타 직무', keywords: [],
     subject: '업무 측정 데이터', metric: '기준 충족 여부', decision: '다음 조치를 정할지', themeBias: ['clean', 'compare', 'quality'] },
@@ -94,3 +105,65 @@ export function resolveGoalIntent(goal: string): GoalIntent {
   return classify(goalIntents, goal);
 }
 export const roleLabels = Object.fromEntries(roles.map(r => [r.id, r.label])) as Record<RoleId, string>;
+
+// The language the learner wants to read, write and prompt in.
+//
+// executable=true means the browser sandbox can run and grade it today. Python would need a WebAssembly runtime
+// (Pyodide, roughly 10MB on first load) that this MVP does not ship, so it is honest about what it is for now:
+// prompts, examples and theory come in Python, while the runnable graded practice stays TypeScript. Flipping
+// executable to true later is the only change this table needs. See docs/DATA_ARCHITECTURE.md.
+export type LanguageId = 'typescript' | 'javascript' | 'python';
+export type Language = { id: LanguageId; label: string; executable: boolean; ecosystem: string; note: string };
+export const languages: Language[] = [
+  { id: 'typescript', label: 'TypeScript', executable: true, ecosystem: 'Node.js · React · Vitest',
+    note: '브라우저에서 바로 실행하고 테스트로 채점합니다.' },
+  { id: 'javascript', label: 'JavaScript', executable: true, ecosystem: 'Node.js · 브라우저',
+    note: '타입을 빼고 먼저 익히고 싶을 때 고르세요. 실행과 채점 방식은 같습니다.' },
+  { id: 'python', label: 'Python', executable: false, ecosystem: 'pandas · matplotlib · Jupyter',
+    note: '프롬프트와 예제를 Python으로 드립니다. 브라우저에서 채점되는 실습은 아직 TypeScript입니다.' },
+];
+export const defaultLanguage: LanguageId = 'typescript';
+export function resolveLanguage(id?: string): Language {
+  return languages.find(l => l.id === id) || languages[0];
+}
+// What the learner wants to end up holding. Vibe coding starts from a picture of the finished thing, so this
+// shapes the closing step of a curriculum rather than the data it uses.
+export type OutputTargetId = 'script' | 'notebook' | 'webapp' | 'automation' | 'dashboard';
+export type OutputTarget = { id: OutputTargetId; label: string; hint: string; closing: string };
+export const outputTargets: OutputTarget[] = [
+  { id: 'script', label: '한 번에 돌리는 스크립트', hint: '파일 하나를 받아 결과를 내보내는 형태',
+    closing: '입력 파일을 바꿔도 같은 결과가 나오는지 확인하고, 실행 방법을 README에 적습니다.' },
+  { id: 'notebook', label: '분석 노트북', hint: '단계별로 실행하며 설명과 그래프를 남기는 형태',
+    closing: '각 단계가 왜 필요한지 주석으로 남기고, 결론을 문장으로 정리합니다.' },
+  { id: 'webapp', label: '웹 화면이 있는 도구', hint: '다른 사람도 열어서 쓸 수 있는 형태',
+    closing: '빈 입력과 잘못된 입력에서 화면이 어떻게 반응하는지 확인합니다.' },
+  { id: 'automation', label: '주기적으로 도는 자동화', hint: '켜두지 않아도 정해진 때에 도는 형태',
+    closing: '실패했을 때 무엇을 남겨야 다음에 원인을 찾을 수 있을지 정합니다.' },
+  { id: 'dashboard', label: '지표를 보는 대시보드', hint: '숫자를 계속 확인하는 형태',
+    closing: '숫자가 이상할 때 원자료까지 되짚어갈 수 있는 경로를 만듭니다.' },
+];
+export function resolveOutputTarget(id?: string): OutputTarget {
+  return outputTargets.find(t => t.id === id) || outputTargets[0];
+}
+// How much the learner has worked with an AI coding assistant. This is the dimension that makes the platform
+// about vibe coding rather than about typing code: it changes how much of the prompt is handed over and how
+// much verification is asked for.
+export type PromptSkillId = 'none' | 'some' | 'fluent';
+export type PromptSkill = { id: PromptSkillId; label: string; coaching: string };
+export const promptSkills: PromptSkill[] = [
+  { id: 'none', label: 'AI에게 코드를 요청해 본 적 없어요',
+    coaching: '프롬프트를 통째로 드립니다. 한 군데만 바꿔 보고 결과가 어떻게 달라지는지 함께 확인합니다.' },
+  { id: 'some', label: '써봤지만 원하는 답을 얻기 어려워요',
+    coaching: '요구사항을 조각으로 나눠 요청하는 순서와, 돌아온 코드를 테스트로 확인하는 습관을 연습합니다.' },
+  { id: 'fluent', label: 'AI로 코드를 자주 만들어요',
+    coaching: '생성된 코드의 경계 조건과 실패 사례를 먼저 의심하는 데 초점을 둡니다.' },
+];
+export function resolvePromptSkill(id?: string): PromptSkill {
+  return promptSkills.find(s => s.id === id) || promptSkills[1];
+}
+// Which assistant the learner already has open. Only used to phrase the copy-and-paste guidance.
+export const aiTools = [
+  { id: 'chatgpt', label: 'ChatGPT' }, { id: 'claude', label: 'Claude' }, { id: 'copilot', label: 'GitHub Copilot' },
+  { id: 'gemini', label: 'Gemini' }, { id: 'cursor', label: 'Cursor' }, { id: 'other', label: '그 밖의 도구' },
+];
+
