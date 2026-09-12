@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { environments, goalIntents, hasRoleSignal, languages, resolveGoalIntent, resolveRole, roles } from '../shared/taxonomy.js';
-import { disciplines, listExercises, profileSignature, recommendation, themes } from '../shared/catalog.js';
+import { disciplines, getExercise, listExercises, profileSignature, recommendation, themes } from '../shared/catalog.js';
 import { defaultProfile, type Profile } from '../shared/schema.js';
 import { generateRules } from '../server/curriculum.js';
 
@@ -104,8 +104,11 @@ describe('generated content follows the category, not the wording', () => {
 });
 
 describe('expanding the catalog', () => {
-  it('generates four executable exercises per discipline', () => {
-    expect(listExercises().length).toBe((disciplines.length + 1) * themes.length);
+  it('generates a TypeScript exercise per theme and a SQL one for the themes a query can express', () => {
+    const fields = disciplines.length + 1;
+    const all = listExercises();
+    expect(all.filter(e => e.language === 'typescript').length).toBe(fields * themes.length);
+    expect(all.filter(e => e.language === 'sql').length).toBe(fields * 3);
   });
   it('keeps the fallback entries last so unmatched input lands there deliberately', () => {
     expect(disciplines[disciplines.length - 1].id).toBe('general');
@@ -115,6 +118,26 @@ describe('expanding the catalog', () => {
     expect(profileSignature(withProfile({ major: '경영학', role: '기획' })).discipline.id).toBe('business');
     expect(profileSignature(withProfile({ major: '반도체공학', role: '공정' })).discipline.id).toBe('semiconductor');
     expect(profileSignature(withProfile({ major: '자동차공학', role: '설계' })).discipline.id).toBe('automotive');
+  });
+});
+
+describe('language routing', () => {
+  it('hands a SQL learner the SQL exercises', () => {
+    const plan = recommendation(withProfile({ major: '화학공학', role: '공정 엔지니어', languageId: 'sql' }));
+    expect(plan.exerciseIds).toHaveLength(3);
+    for (const id of plan.exerciseIds) expect(id.endsWith(':sql'), id).toBe(true);
+    for (const id of plan.exerciseIds) expect(getExercise(id)?.language).toBe('sql');
+  });
+  it('keeps every other language on the TypeScript exercises', () => {
+    for (const languageId of ['typescript', 'javascript', 'python', 'r']) {
+      const plan = recommendation(withProfile({ major: '화학공학', role: '공정 엔지니어', languageId }));
+      for (const id of plan.exerciseIds) expect(getExercise(id)?.language, `${languageId}: ${id}`).toBe('typescript');
+    }
+  });
+  it('never offers a SQL exercise for the asynchronous theme', () => {
+    expect(getExercise('chemical:async:sql')).toBeUndefined();
+    expect(getExercise('chemical:clean:sql')?.language).toBe('sql');
+    expect(getExercise('chemical:clean:python')).toBeUndefined();
   });
 });
 
@@ -144,7 +167,7 @@ describe('vibe coding dimensions', () => {
     expect(languages.map(l => l.id)).toEqual(['typescript', 'javascript', 'python', 'sql', 'r']);
     // TypeScript is a superset of JavaScript and both run in the same sandbox, so the JavaScript option is a
     // real choice rather than a label: the practice still executes after the type annotations are removed.
-    expect(languages.filter(l => l.executable).map(l => l.id)).toEqual(['typescript', 'javascript']);
+    expect(languages.filter(l => l.executable).map(l => l.id)).toEqual(['typescript', 'javascript', 'sql']);
     expect(languages.find(l => l.id === 'javascript')?.note).toContain('지워도');
     expect(languages.find(l => l.id === 'sql')?.note).toContain('DB');
   });

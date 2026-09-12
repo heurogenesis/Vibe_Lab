@@ -512,3 +512,49 @@ npm.cmd run dev
   3) 빈칸 실습 코드 자체는 언어별로 달라지지 않음(항상 TS 형태). 언어별 스타터 코드 생성은 미구현.
 사용자 승인 또는 결정이 필요한 사항: SQL 실행(sql.js)을 22일 범위에 넣을지 여부.
 ```
+
+### 2026-09-12 (10차) SQL 실행·채점 구현 (sql.js / SQLite WebAssembly)
+
+```text
+날짜 / 담당 AI: 2026-09-12 / Claude Code
+작업 목적: SQL을 예제 언어가 아니라 실제로 실행되고 채점되는 학습 언어로 만들기
+브랜치: feature/mvp-savepoint-20260912
+추가한 의존성 (package.json - 사용자 요청에 따른 변경): sql.js ^1.14.2, @types/sql.js. npm audit 취약점 0건.
+변경 파일:
+  shared/catalog.ts - Exercise에 language 필드, SQL 실습 생성기(3개 테마), 언어별 실습 라우팅
+  shared/taxonomy.ts - SQL을 executable: true로 변경하고 안내 문구 교체
+  src/sql-worker.ts(신규) - SQLite WASM 워커
+  src/sql-runner.ts(신규) - startSqlRun(), 기존 RunHandle과 동일한 인터페이스
+  src/CodeLab.tsx - 언어에 따라 실행기 분기, 에디터 라벨·안내 문구 분기
+  server/app.ts - CSP에 'wasm-unsafe-eval'과 worker-src 추가
+  tests/sql.test.ts(신규) - 생성된 SQL 실습 54개를 실제 SQLite로 검증
+  tests/practice.test.ts, tests/taxonomy.test.ts - 언어별 검증 하네스 분리, 라우팅 테스트 추가
+격리 설계(중요): SQL은 iframe 샌드박스를 쓰지 않음.
+  그 샌드박스는 학습자가 쓴 "JavaScript"를 가두기 위한 것이고, SQL 문자열은 JS가 아니라 SQLite(WASM) 안에서 파싱·실행됨.
+  sql.js는 메모리 DB만 가지며 파일시스템·네트워크·DOM 접근이 없음. 남는 위험은 무거운 질의로 인한 시간 소모뿐이라
+  전용 Worker에서 실행하고 타임아웃·중지 시 워커를 terminate함. 워커 응답은 우리 코드이므로 iframe 경로와 달리 스키마 검증 불필요.
+CSP 변경: script-src에 'wasm-unsafe-eval' 추가. WebAssembly 컴파일만 허용하며 JavaScript eval은 여전히 차단됨.
+실습 구성: 분야 18개(프로젝트 포함) x 3개 테마(clean/compare/quality) = SQL 실습 54개.
+  비동기(async) 테마는 SQL에 대응이 없어 제외. 테이블은 readings(grp TEXT, value REAL) 한 개, 표본은 TS 실습과 동일.
+  SQL 의미론이 다른 지점은 숨기지 않고 테스트 이름으로 드러냄:
+  '값이 전부 NULL인 그룹은 사라집니다' - 함수로 짜면 그 그룹을 null로 남길 수 있지만 SQL은 WHERE에서 전부 걸러지면 행 자체가 없음.
+검증 명령과 실제 결과:
+  - npm run typecheck: 통과
+  - npm test: 179 passed | 1 skipped (이전 118 -> 179). 신규 58개는 tests/sql.test.ts가 실제 SQLite로
+    54개 실습의 정답 질의를 모든 테스트 케이스에 대해 실행해 기대값과 대조한 것. 스타터 질의가 이미 정답이 아닌지도 검사.
+  - npm run build: 통과. dist/assets/sql-wasm.wasm 643KB(gzip 323KB), sql-worker.js 42KB로 분리 번들되어
+    SQL 실습을 열 때만 내려받음.
+  - 브라우저 실측: 프로필 언어를 SQL로 저장 -> 과제의 실습이 semiconductor:quality:sql 등 SQL 실습으로 배정됨 ->
+    워크스페이스에서 정답 질의 입력 후 실행 -> "4 / 4 테스트 통과", 샘플 출력 [{"observed":4,"accepted":3,"rate":0.75}].
+    CSP 위반이나 콘솔 오류 없음.
+남은 문제 / 다음 작업:
+  1) Python·R은 여전히 프롬프트·예제 언어. 실행 채점은 TypeScript/JavaScript/SQL 세 가지.
+  2) PracticeLibrary 자료실은 126개 실습을 모두 보여줌. 언어 필터가 없어 TS 학습자에게 SQL 실습도 노출됨.
+  3) 세션이 메모리라 dev 서버 재시작마다 로그아웃되어 이번 검증에서도 두 번 재로그인함. SESSION_SECRET과 영속 저장소 필요.
+사용자 승인 또는 결정이 필요한 사항: R 실행(webR) 도입 여부 - 아래 판단 근거 참고.
+  webR 공식 문서상 SharedArrayBuffer 채널을 쓰려면 COOP: same-origin 과 COEP: require-corp 헤더가 필요함.
+  이는 페이지 전체에 적용되어 모든 교차 출처 리소스가 CORP/CORS를 만족해야 하므로, 현재 쓰는
+  Google Fonts와 GitHub raw의 외부 데이터셋(P0-03) 로딩에 영향을 줌.
+  헤더 없이 PostMessage 채널로 대체할 수 있으나, 공식 문서가 "실행 중인 R 코드의 중단(interruption)과
+  readline() 등 사용자 입력 기능은 지원되지 않는다"고 명시함. 학습 샌드박스에서 무한 루프를 멈출 수 없다는 뜻.
+```

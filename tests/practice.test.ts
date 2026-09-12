@@ -65,7 +65,7 @@ describe('personalized engineering curriculum',()=>{
  });
 });
 describe('executable exercise contracts',()=>{
- it.each(listExercises().map(exercise=>[exercise.id,exercise] as const))('%s reference passes every published test',async(_id,exercise)=>{
+ it.each(listExercises().filter(e=>e.language==='typescript').map(exercise=>[exercise.id,exercise] as const))('%s reference passes every published test',async(_id,exercise)=>{
   const result=await execute(exercise,reference(exercise));
   expect(result.error).toBeUndefined();expect(result.tests).toHaveLength(exercise.tests.length);
   expect(result.tests.filter(t=>!t.passed)).toEqual([]);

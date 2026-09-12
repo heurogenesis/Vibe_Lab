@@ -121,8 +121,8 @@ export const languages: Language[] = [
     note: '타입 없이 먼저 익히고 싶을 때 고르세요. 빈칸 실습은 TypeScript 형태로 제공되지만 타입 표기를 지워도 그대로 실행되고 채점됩니다.' },
   { id: 'python', label: 'Python', executable: false, ecosystem: 'pandas · matplotlib · Jupyter',
     note: '데이터 업무에서 가장 많이 만나는 언어입니다. 프롬프트와 예제를 Python으로 드리고, 브라우저에서 채점되는 실습은 아직 TypeScript입니다.' },
-  { id: 'sql', label: 'SQL', executable: false, ecosystem: 'PostgreSQL · SQLite · BigQuery',
-    note: '데이터가 DB에 있다면 반드시 만나는 언어입니다. 질의문 예제와 프롬프트를 SQL로 드리고, 채점되는 실습은 같은 계산을 함수로 옮겨 확인합니다.' },
+  { id: 'sql', label: 'SQL', executable: true, ecosystem: 'PostgreSQL · SQLite · BigQuery',
+    note: '데이터가 DB에 있다면 반드시 만나는 언어입니다. 브라우저 안의 SQLite에서 질의문을 그대로 실행하고 채점합니다.' },
   { id: 'r', label: 'R', executable: false, ecosystem: 'tidyverse · ggplot2 · RStudio',
     note: '통계와 논문 그래프에 강한 언어입니다. 예제와 프롬프트를 R로 드리고, 채점되는 실습은 아직 TypeScript입니다.' },
 ];

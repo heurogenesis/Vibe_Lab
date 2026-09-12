@@ -29,7 +29,10 @@ export function createApp(users: UserStore, ai: LearningAI, github: GitHubClient
     res.set({ 'Content-Security-Policy': sandboxCsp, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
     res.type('html').send(sandboxHtml);
   });
-  app.use(helmet({ contentSecurityPolicy: { directives: { 'font-src': ["'self'", 'https://fonts.gstatic.com'], 'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'], 'connect-src': ["'self'", ...new Set(dataSources.map(s => new URL(s.url).origin))], 'frame-src': ["'self'"], 'upgrade-insecure-requests': null } } }));
+  app.use(helmet({ contentSecurityPolicy: { directives: { 'font-src': ["'self'", 'https://fonts.gstatic.com'],
+    // SQL practice runs SQLite compiled to WebAssembly in a worker; compiling it requires wasm-unsafe-eval,
+    // which allows WebAssembly compilation and nothing else. JavaScript eval stays blocked.
+    'script-src': ["'self'", "'wasm-unsafe-eval'"], 'worker-src': ["'self'", 'blob:'], 'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'], 'connect-src': ["'self'", ...new Set(dataSources.map(s => new URL(s.url).origin))], 'frame-src': ["'self'"], 'upgrade-insecure-requests': null } } }));
   app.use('/api', (req, res, next) => {
     const host = req.hostname;
     if (!['127.0.0.1', 'localhost', '[::1]', '::1'].includes(host)) return res.status(403).json({ error: '로컬 접속만 허용됩니다.' });

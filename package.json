@@ -28,6 +28,7 @@
     "pg": "^8.16.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "sql.js": "^1.14.2",
     "zod": "^4.1.0"
   },
   "devDependencies": {
@@ -39,6 +40,7 @@
     "@types/pg": "^8.15.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "@types/sql.js": "^1.4.11",
     "@types/supertest": "^6.0.0",
     "@vitejs/plugin-react": "^5.0.0",
     "concurrently": "^9.2.0",
