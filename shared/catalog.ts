@@ -98,11 +98,12 @@ export function recommendation(profile: Profile) {
   // A planning role still learns on their own field's data; the project track is added alongside, and only
   // takes over when the field itself could not be identified.
   const primary = project && d.id === 'general' ? projectDiscipline : d;
-  // SQL is graded by running SQLite and covers three of the four themes, so a SQL learner gets the SQL
-  // variants of exactly those. Every other language is taught through the TypeScript exercises.
-  const sql = resolveLanguage(profile.languageId).id === 'sql';
-  const suffix = sql ? ':sql' : '';
-  const pool: readonly string[] = sql ? sqlThemes : themes.map(t => t.id);
+  // SQL and R are graded by running them, and both cover three of the four themes, so those learners get the
+  // matching variants. JavaScript and Python are taught through the TypeScript exercises.
+  const language = resolveLanguage(profile.languageId).id;
+  const runnable = language === 'sql' || language === 'r';
+  const suffix = runnable ? `:${language}` : '';
+  const pool: readonly string[] = runnable ? coreThemes : themes.map(t => t.id);
   const ranked = preferences.filter(t => pool.includes(t));
   const ids = ranked.slice(0, 3).map(t => `${primary.id}:${t}${suffix}`);
   for (const theme of pool) if (ids.length < 3 && !ids.includes(`${primary.id}:${theme}${suffix}`)) ids.push(`${primary.id}:${theme}${suffix}`);
@@ -113,8 +114,8 @@ export function recommendation(profile: Profile) {
 export type ExerciseTest = { name: string; input: unknown; expected: unknown; hint: string };
 export type Exercise = {
   id: string; version: string; disciplineId: string; theme: string; title: string;
-  // 'typescript' exercises run in the iframe sandbox; 'sql' exercises run against SQLite in a worker.
-  language: 'typescript' | 'sql';
+  // 'typescript' runs in the iframe sandbox, 'sql' against SQLite in a worker, 'r' in webR's own worker.
+  language: 'typescript' | 'sql' | 'r';
   objective: string; theory: string; contract: string; starter: string;
   tests: ExerciseTest[]; hints: string[]; sample: DataRow[];
   sourceIds: string[]; referenceUrl: string;
@@ -129,7 +130,9 @@ const mean = (a: number[]) => a.length ? a.reduce((sum, n) => sum + n, 0) / a.le
 // so the two languages teach the same contract. Where SQL genuinely behaves differently - a group whose values
 // are all NULL disappears instead of reporting null - the test says so rather than hiding it.
 export const SQL_TABLE = 'readings(grp TEXT, value REAL)';
-export const sqlThemes = ['clean', 'compare', 'quality'] as const;
+// The three themes a single query or a single vectorised expression can express. Asynchronous collection is
+// taught only in TypeScript, where the learner can actually see promises resolve.
+export const coreThemes = ['clean', 'compare', 'quality'] as const;
 function sqlExercise(d: Discipline, theme: string, base: Omit<Exercise, 'language'|'title'|'objective'|'theory'|'contract'|'starter'|'tests'>, rows: DataRow[], bounds: string): Exercise | undefined {
   const shared = { ...base, language: 'sql' as const,
     hints: [...base.hints, `WHERE는 어떤 행을 계산에 넣을지, 집계 함수는 남은 행을 어떻게 합칠지 정합니다.`] };
@@ -174,10 +177,40 @@ function sqlExercise(d: Discipline, theme: string, base: Omit<Exercise, 'languag
     ] };
   return undefined;
 }
+// R practice reuses the TypeScript exercise's tests verbatim. Both languages implement the same solve(rows)
+// contract and must produce the same answers, so sharing the expectations makes drift between them impossible.
+function rExercise(d: Discipline, theme: string, source: Exercise, bounds: string): Exercise {
+  const common = { ...source, id: `${source.id}:r`, language: 'r' as const,
+    hints: [...source.hints, 'NA는 값이 없다는 뜻이고 0이 아닙니다. is.na()로 먼저 걸러 보세요.'] };
+  if (theme === 'clean') return { ...common,
+    title: `${d.subject}: 유효 데이터 평균 (R)`,
+    objective: `${d.measurement}(${d.unit})에서 결측(NA)과 범위 밖 값을 제외한 평균을 돌려주는 solve()를 완성합니다.`,
+    contract: `solve(rows)를 정의합니다. rows는 group, value 두 열을 가진 data.frame이고 결측은 NA입니다. ${bounds}(양 끝 포함) 밖의 값과 NA는 제외하며, 남은 값이 없으면 NA_real_을 돌려줍니다.`,
+    theory: 'R의 벡터 연산은 조건을 만족하는 원소만 골라내는 데 강합니다. NA는 숫자가 아니라 "값을 모른다"는 표시이므로 is.na()로 따로 다뤄야 하고, 산술에 그대로 쓰면 결과까지 NA가 됩니다. mean()의 분모는 전체 길이가 아니라 골라낸 원소의 개수입니다.',
+    starter: `solve <- function(rows) {\n  values <- rows$value\n  # BLANK 1: ${bounds} 범위 안인지 확인하는 조건을 TRUE 자리에 넣으세요\n  keep <- !is.na(values) & is.finite(values) & TRUE\n  valid <- values[keep]\n  if (length(valid) == 0) return(NA_real_)\n  # BLANK 2: 남은 값들의 평균을 돌려주세요\n  0\n}` };
+  if (theme === 'compare') return { ...common,
+    title: `${d.subject}: 그룹별 비교 (R)`,
+    objective: `${d.groups.join(' / ')}처럼 group별 ${d.measurement} 평균을 이름 있는 리스트로 돌려주는 solve()를 완성합니다.`,
+    contract: 'solve(rows)를 정의합니다. group마다 NA가 아닌 값들의 평균을 담은 이름 있는 리스트를 돌려줍니다. 유효한 값이 하나도 없는 group은 그 자리에 NULL을 남기고, 빈 입력은 빈 리스트입니다.',
+    theory: `group을 기준으로 나누어 각각을 계산하는 것이 집계입니다. ${d.context} R에서 리스트의 원소로 NULL을 두면 "그 그룹은 있었지만 계산할 값이 없었다"를 표현할 수 있습니다. 같은 계산을 SQL로 쓰면 그 그룹이 결과에서 아예 사라지므로, 두 결과를 비교해 보면 차이가 분명해집니다.`,
+    starter: `solve <- function(rows) {\n  groups <- unique(rows$group)\n  result <- lapply(groups, function(g) {\n    values <- rows$value[rows$group == g]\n    valid <- values[!is.na(values) & is.finite(values)]\n    # BLANK: 유효한 값이 없으면 NULL, 있으면 평균을 돌려주세요\n    NULL\n  })\n  names(result) <- groups\n  result\n}` };
+  return { ...common,
+    title: `${d.subject}: 기준 충족 비율 (R)`,
+    objective: `${d.measurement} 기록에서 유효 관측 수와 ${bounds} 충족 비율을 리스트로 돌려주는 solve()를 완성합니다.`,
+    contract: `solve(rows)를 정의합니다. list(observed=, accepted=, rate=)를 돌려줍니다. observed는 NA가 아닌 유한한 관측 수, accepted는 그중 ${bounds}를 충족하는 수, rate는 accepted/observed이며 관측이 없으면 NULL입니다.`,
+    theory: '비율은 분모를 무엇으로 두느냐에 따라 전혀 다른 뜻이 됩니다. 결측을 정상으로 세면 품질이 실제보다 좋아 보입니다. 범위 밖의 값은 관측은 된 것이므로 분모에는 남기고 분자에서만 빼야 합니다. sum()은 논리값 벡터의 TRUE 개수를 세는 데 그대로 쓸 수 있습니다.',
+    starter: `solve <- function(rows) {\n  values <- rows$value\n  observed_values <- values[!is.na(values) & is.finite(values)]\n  observed <- length(observed_values)\n  # BLANK 1: ${bounds}를 충족하는 관측 수를 세어 주세요\n  accepted <- 0\n  # BLANK 2: 관측이 없으면 NULL, 있으면 accepted / observed\n  list(observed = observed, accepted = accepted, rate = NULL)\n}` };
+}
 export function getExercise(id: string): Exercise | undefined {
   const [disciplineId, theme, variant, extra] = id.split(':');
   const d = [...disciplines, projectDiscipline].find(x => x.id === disciplineId);
-  if (!d || extra || (variant && variant !== 'sql') || !themes.some(t => t.id === theme)) return undefined;
+  if (!d || extra || !themes.some(t => t.id === theme)) return undefined;
+  if (variant && variant !== 'sql' && variant !== 'r') return undefined;
+  if (variant && !(coreThemes as readonly string[]).includes(theme)) return undefined;
+  if (variant === 'r') {
+    const source = getExercise(`${disciplineId}:${theme}`);
+    return source && rExercise(d, theme, source, `${d.min} ≤ ${d.measurement} ≤ ${d.max} ${d.unit}`);
+  }
   const rows = sampleRows(d);
   const bounds = `${d.min} ≤ ${d.measurement} ≤ ${d.max} ${d.unit}`;
   const base = { id, version: CATALOG_VERSION, disciplineId, theme, sample: rows, sourceIds: d.id === 'life' ? ['palmer-penguins'] : [], referenceUrl: 'https://github.com/simple-statistics/simple-statistics', hints: ['입력과 반환 타입을 먼저 읽어 보세요.', '실패한 테스트의 기대값과 실제값을 비교하세요.'] };
@@ -213,7 +246,8 @@ export function listExercises() {
   const all = [...disciplines, projectDiscipline];
   return [
     ...all.flatMap(d => themes.map(t => getExercise(`${d.id}:${t.id}`)!)),
-    // SQL covers the three themes that map onto a query. Asynchronous collection has no SQL equivalent here.
-    ...all.flatMap(d => sqlThemes.map(t => getExercise(`${d.id}:${t}:sql`)!)),
+    // SQL and R cover the three themes that map onto a query or a vectorised expression.
+    ...all.flatMap(d => coreThemes.map(t => getExercise(`${d.id}:${t}:sql`)!)),
+    ...all.flatMap(d => coreThemes.map(t => getExercise(`${d.id}:${t}:r`)!)),
   ];
 }

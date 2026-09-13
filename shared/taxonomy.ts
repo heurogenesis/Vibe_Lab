@@ -123,8 +123,8 @@ export const languages: Language[] = [
     note: '데이터 업무에서 가장 많이 만나는 언어입니다. 프롬프트와 예제를 Python으로 드리고, 브라우저에서 채점되는 실습은 아직 TypeScript입니다.' },
   { id: 'sql', label: 'SQL', executable: true, ecosystem: 'PostgreSQL · SQLite · BigQuery',
     note: '데이터가 DB에 있다면 반드시 만나는 언어입니다. 브라우저 안의 SQLite에서 질의문을 그대로 실행하고 채점합니다.' },
-  { id: 'r', label: 'R', executable: false, ecosystem: 'tidyverse · ggplot2 · RStudio',
-    note: '통계와 논문 그래프에 강한 언어입니다. 예제와 프롬프트를 R로 드리고, 채점되는 실습은 아직 TypeScript입니다.' },
+  { id: 'r', label: 'R', executable: true, ecosystem: 'tidyverse · ggplot2 · RStudio',
+    note: '통계와 논문 그래프에 강한 언어입니다. 브라우저에서 실제 R을 실행해 채점합니다. 처음 실행할 때 R 런타임 약 17MB를 내려받습니다.' },
 ];
 // The sandbox compiles TypeScript to JavaScript and runs it in a Worker, so only those two execute today.
 // If a second runtime is ever added, SQL is the cheapest one: SQLite compiled to WebAssembly (sql.js) is about

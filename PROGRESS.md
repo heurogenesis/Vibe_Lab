@@ -558,3 +558,84 @@ CSP 변경: script-src에 'wasm-unsafe-eval' 추가. WebAssembly 컴파일만 �
   헤더 없이 PostMessage 채널로 대체할 수 있으나, 공식 문서가 "실행 중인 R 코드의 중단(interruption)과
   readline() 등 사용자 입력 기능은 지원되지 않는다"고 명시함. 학습 샌드박스에서 무한 루프를 멈출 수 없다는 뜻.
 ```
+
+### 2026-09-13 (11차) 교차 출처 격리(COOP/COEP) + R 실행·채점 구현 (webR)
+
+```text
+날짜 / 담당 AI: 2026-09-13 / Claude Code
+작업 목적: R을 예제 언어가 아니라 실제로 실행되고 채점되는 학습 언어로 만들기.
+  10차에서 사용자 결정을 요청했던 두 갈래 중 "COOP/COEP까지 제대로 구현"을 사용자가 선택함.
+브랜치: feature/mvp-savepoint-20260912
+추가한 의존성 (package.json - 사용자 요청에 따른 변경): webr ^0.6.0. npm audit 취약점 0건.
+변경 파일:
+  vite.config.ts (승인 대상 파일 - 사용자가 COOP/COEP 선택으로 승인) - dev 서버 COOP/COEP 헤더,
+    webrAssets() 플러그인으로 node_modules/webr/dist 를 /webr/ 에 서빙하고 빌드 시 dist/webr 로 복사
+  server/app.ts - helmet 에 crossOriginOpenerPolicy: same-origin, crossOriginEmbedderPolicy: require-corp.
+    /practice-sandbox.html 응답에 COEP: require-corp, CORP: same-origin 추가
+  index.html, src/styles.css - Google Fonts 를 CSS @import 에서 crossorigin 지정한 <link> 로 이동
+  shared/taxonomy.ts - R 을 executable: true 로 변경, 런타임 17MB 다운로드 안내 문구 추가
+  shared/catalog.ts - rExercise() 생성기, R 실습 라우팅(:r), coreThemes 재사용
+  src/r-runner.ts(신규) - startRRun(), 기존 RunHandle 과 동일한 인터페이스
+  src/CodeLab.tsx - R 분기(에디터 라벨, 안내 문구, 실행기 선택)
+  tests/taxonomy.test.ts, tests/practice.test.ts - R 라우팅 검증, 타입스크립트 컴파일러 예열
+  .gitignore - dist/webr/, dev.log
+
+교차 출처 격리를 택한 이유: webR 이 실행 중인 R 코드를 중단(interrupt)할 수 있는 채널은
+  SharedArrayBuffer 뿐이고, SharedArrayBuffer 는 COOP: same-origin + COEP: require-corp 없이는 쓸 수 없음.
+  PostMessage 채널로 낮추면 학습자의 무한 루프를 멈출 방법이 사라짐. 학습 샌드박스에서는 그게 더 큰 위험이라 판단.
+격리 도입으로 실제로 깨진 것과 대응:
+  1) Google Fonts - CSS @import 는 no-cors 요청이라 COEP 아래에서 거부됨.
+     index.html 에 crossorigin 을 명시한 <link rel="stylesheet"> 로 옮겨 해결(폰트 744종 로드 확인).
+  2) webR 런타임 - CDN 에서 받으면 교차 출처라 거부됨. node_modules 에서 자체 호스팅(/webr/)으로 해결.
+  3) webR 워커 기동 실패 - 가장 읽기 어려운 실패였음. new Worker('/webr/webr-worker.js') 가
+     메시지가 전혀 없는 ErrorEvent([object Event])로 죽음. 동일한 바이트를 blob URL 로 띄우면 정상이라는 점으로
+     원인을 좁힌 뒤 응답 헤더를 비교해, 워커 스크립트 응답 자체에 COEP: require-corp 가 없어서임을 확인.
+     교차 출처 격리된 페이지에서 시작하는 워커는 자기 스크립트 응답도 같은 embedder policy 를 선언해야 함.
+     vite.config.ts 의 webrAssets() 플러그인에서 해당 헤더를 추가해 해결.
+
+실습 구성: 분야 18개(프로젝트 포함) x 3개 테마(clean/compare/quality) = R 실습 54개.
+  총 실습 180개 = TypeScript 72 + SQL 54 + R 54.
+  rExercise() 는 대응하는 TypeScript 실습의 tests 를 그대로 재사용함. R 과 TS 의 정답 기준이 구조적으로 어긋날 수 없음.
+
+브라우저 실측 중 발견해 고친 버그 (src/r-runner.ts):
+  증상 - 정답을 실행해 4/4 통과한 다음 오답을 실행하면 채점되지 않고 20초 타임아웃으로 끝남.
+  원인 - 실행 종료 처리(cleanup)가 성공·실패를 가리지 않고 webR.interrupt() 를 호출하고 있었음.
+    webR 의 interrupt 는 R 이 다음 평가 시점에 확인하는 플래그를 세울 뿐이라, 놀고 있는 인터프리터를 중단시키는 게
+    아니라 "다음 실행"을 오염시킴. 다음 실행은 'A non-local transfer of control occurred during evaluation'
+    로 죽거나 그대로 멈춤. 단일 테스트로 분리 실행해 이 메시지를 확인하고 원인을 특정함.
+  수정 - 종료 처리를 settle(타이머 해제 후 resolve)과 abort(interrupt 후 settle)로 분리.
+    타임아웃과 사용자 중지만 abort 를 쓰고, 정상 종료·예외는 settle 을 씀.
+    즉 실제로 R 코드가 돌고 있을 때만 interrupt 를 보냄.
+  이 버그는 단위 테스트로 잡을 수 없었음. webR 은 브라우저에서만 돌고, 증상이 "다음 실행"에서만 나타남.
+
+같이 고친 것 (tests/practice.test.ts): executable exercise contracts 의 앞쪽 2~3개 케이스가
+  5초 타임아웃으로 간헐 실패했음. compileCode 안의 typescript 동적 import 가 Vite 변환 비용(수 초)을
+  첫 테스트에 전가하던 것. beforeAll 에서 한 번 예열하도록 바꿈. 실습 실행 타임아웃은 폭주 코드를 잡기 위한 것이지
+  모듈 로딩을 재는 게 아님.
+
+검증 명령과 실제 결과:
+  - npm run typecheck: 통과
+  - npm test: 180 passed | 1 skipped (10차 179 -> 180)
+  - npm run build: 통과. dist/webr 167개 파일 46.33MB 복사 확인(.gitignore 처리).
+    앱 번들은 변화 없음 - webR 은 정적 자산으로만 나가고 R 실습을 열 때만 내려받음.
+  - 브라우저 실측(프로필 언어 R, 전공 통계학 / 직무 품질관리 엔지니어):
+      crossOriginIsolated: true, SharedArrayBuffer: function, Google Fonts 744종 로드
+      iframe JS 샌드박스 정상, GitHub raw 데이터셋 {status: 200, bytes: 67119}
+      new Worker('/webr/webr-worker.js') 오류 없이 기동
+      science:quality:r 정답 실행 -> "4 / 4 테스트 통과", 샘플 출력 {"observed":4,"accepted":3,"rate":0.75}
+      오답(accepted 를 0 고정) -> 1/4 통과. 통과한 1개는 빈 데이터 케이스로, 오답이어도 맞는 것이 정상
+      정답/오답을 번갈아 4회 연속 실행 -> 각각 13~18ms, 결과 일관. 위 버그 재발 없음
+      무한 루프(repeat { }) -> 20.01초에 중단되고 제한 시간 메시지 표시, 직후 정답 실행이 14ms 에 4/4 통과.
+        SharedArrayBuffer 채널의 interrupt 가 실제로 동작하고 R 이 복구된다는 확인 - 이번 격리 작업의 목적 그 자체
+문서와 코드의 불일치 (수정하지 않고 기록):
+  1) 과제 상단 "이 과제가 나에게 맞는 이유" 칩이 R 과제에서도 "TypeScript 함수"로 표시됨.
+     server/curriculum.ts 의 focus 문구가 언어를 반영하지 않음. 다음 단위 작업에서 처리 필요.
+  2) docs/API.md 가 여전히 "인증·다중 사용자 API가 아닙니다"로 되어 있고 /api/auth/* 가 빠져 있음(6차부터 누적).
+남은 문제 / 다음 작업:
+  1) Python 은 여전히 프롬프트·예제 언어. 실행 채점은 TypeScript/JavaScript/SQL/R 네 가지.
+  2) PracticeLibrary 자료실이 180개를 전부 노출함. 언어 필터 없음.
+  3) 세션이 메모리라 서버 재시작마다 로그아웃됨. SESSION_SECRET 미설정.
+  4) usesPractice() 게이트는 PZ 트랙 전에 재정의 필요(8차 기록 참고).
+  5) PostgreSQL 경로는 실제 DB 대상 미검증.
+사용자 승인 또는 결정이 필요한 사항: 없음.
+```

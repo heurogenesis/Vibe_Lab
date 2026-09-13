@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createContext, runInContext } from 'node:vm';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -64,6 +64,11 @@ describe('personalized engineering curriculum',()=>{
   expect(result.source).toBe('rules');expect(fetcher).not.toHaveBeenCalled();
  });
 });
+// The first dynamic import of typescript inside compileCode pays Vite's transform cost for the whole
+// compiler, which on a loaded machine runs into seconds. Paying it once here keeps that one-time module
+// load out of the per-exercise timeouts below, which exist to catch runaway learner code rather than a
+// slow import. Without this the first two exercises in the loop fail intermittently at 5s.
+beforeAll(async()=>{await compileCode('function solve(rows){return rows;}');},60000);
 describe('executable exercise contracts',()=>{
  it.each(listExercises().filter(e=>e.language==='typescript').map(exercise=>[exercise.id,exercise] as const))('%s reference passes every published test',async(_id,exercise)=>{
   const result=await execute(exercise,reference(exercise));

@@ -26,10 +26,16 @@ function workspaceOf(req: express.Request): Store {
 export function createApp(users: UserStore, ai: LearningAI, github: GitHubClient, options: { port?: number; githubAuthenticated?: boolean } = {}) {
   const app = express(); app.disable('x-powered-by');
   app.get('/practice-sandbox.html', (_req,res) => {
-    res.set({ 'Content-Security-Policy': sandboxCsp, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
+    // A document embedded in a cross-origin isolated page must carry the policy itself, or the browser refuses
+    // to load the frame. This is what keeps the JavaScript practice sandbox working once COEP is on.
+    res.set({ 'Content-Security-Policy': sandboxCsp, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
+      'Cross-Origin-Embedder-Policy': 'require-corp', 'Cross-Origin-Resource-Policy': 'same-origin' });
     res.type('html').send(sandboxHtml);
   });
-  app.use(helmet({ contentSecurityPolicy: { directives: { 'font-src': ["'self'", 'https://fonts.gstatic.com'],
+  app.use(helmet({
+    crossOriginOpenerPolicy: { policy: 'same-origin' },
+    crossOriginEmbedderPolicy: { policy: 'require-corp' },
+    contentSecurityPolicy: { directives: { 'font-src': ["'self'", 'https://fonts.gstatic.com'],
     // SQL practice runs SQLite compiled to WebAssembly in a worker; compiling it requires wasm-unsafe-eval,
     // which allows WebAssembly compilation and nothing else. JavaScript eval stays blocked.
     'script-src': ["'self'", "'wasm-unsafe-eval'"], 'worker-src': ["'self'", 'blob:'], 'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'], 'connect-src': ["'self'", ...new Set(dataSources.map(s => new URL(s.url).origin))], 'frame-src': ["'self'"], 'upgrade-insecure-requests': null } } }));

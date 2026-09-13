@@ -109,6 +109,7 @@ describe('expanding the catalog', () => {
     const all = listExercises();
     expect(all.filter(e => e.language === 'typescript').length).toBe(fields * themes.length);
     expect(all.filter(e => e.language === 'sql').length).toBe(fields * 3);
+    expect(all.filter(e => e.language === 'r').length).toBe(fields * 3);
   });
   it('keeps the fallback entries last so unmatched input lands there deliberately', () => {
     expect(disciplines[disciplines.length - 1].id).toBe('general');
@@ -122,20 +123,33 @@ describe('expanding the catalog', () => {
 });
 
 describe('language routing', () => {
+  it('hands an R learner the R exercises, which share the TypeScript expectations', () => {
+    const plan = recommendation(withProfile({ major: '화학공학', role: '공정 엔지니어', languageId: 'r' }));
+    expect(plan.exerciseIds).toHaveLength(3);
+    for (const id of plan.exerciseIds) {
+      const exercise = getExercise(id);
+      expect(exercise?.language, id).toBe('r');
+      // The R exercise must assert exactly what the TypeScript one asserts, so the two cannot drift apart.
+      expect(exercise?.tests).toEqual(getExercise(id.replace(/:r$/, ''))?.tests);
+    }
+  });
   it('hands a SQL learner the SQL exercises', () => {
     const plan = recommendation(withProfile({ major: '화학공학', role: '공정 엔지니어', languageId: 'sql' }));
     expect(plan.exerciseIds).toHaveLength(3);
     for (const id of plan.exerciseIds) expect(id.endsWith(':sql'), id).toBe(true);
     for (const id of plan.exerciseIds) expect(getExercise(id)?.language).toBe('sql');
   });
-  it('keeps every other language on the TypeScript exercises', () => {
-    for (const languageId of ['typescript', 'javascript', 'python', 'r']) {
+  it('keeps the languages without their own runtime on the TypeScript exercises', () => {
+    // JavaScript shares the TypeScript sandbox, and Python has no runtime here, so both learn on those.
+    for (const languageId of ['typescript', 'javascript', 'python']) {
       const plan = recommendation(withProfile({ major: '화학공학', role: '공정 엔지니어', languageId }));
       for (const id of plan.exerciseIds) expect(getExercise(id)?.language, `${languageId}: ${id}`).toBe('typescript');
     }
   });
   it('never offers a SQL exercise for the asynchronous theme', () => {
     expect(getExercise('chemical:async:sql')).toBeUndefined();
+    expect(getExercise('chemical:async:r')).toBeUndefined();
+    expect(getExercise('chemical:clean:r')?.language).toBe('r');
     expect(getExercise('chemical:clean:sql')?.language).toBe('sql');
     expect(getExercise('chemical:clean:python')).toBeUndefined();
   });
@@ -167,7 +181,7 @@ describe('vibe coding dimensions', () => {
     expect(languages.map(l => l.id)).toEqual(['typescript', 'javascript', 'python', 'sql', 'r']);
     // TypeScript is a superset of JavaScript and both run in the same sandbox, so the JavaScript option is a
     // real choice rather than a label: the practice still executes after the type annotations are removed.
-    expect(languages.filter(l => l.executable).map(l => l.id)).toEqual(['typescript', 'javascript', 'sql']);
+    expect(languages.filter(l => l.executable).map(l => l.id)).toEqual(['typescript', 'javascript', 'sql', 'r']);
     expect(languages.find(l => l.id === 'javascript')?.note).toContain('지워도');
     expect(languages.find(l => l.id === 'sql')?.note).toContain('DB');
   });
