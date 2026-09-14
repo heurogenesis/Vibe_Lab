@@ -3,8 +3,9 @@ import { ArrowRight, Check, X } from 'lucide-react';
 import { signupSchema, userHandleSchema, type User } from '../shared/schema';
 import { api } from './api';
 type Mode = 'login' | 'signup';
-export default function Auth({ onAuthenticated }: { onAuthenticated: (user: User) => void }) {
-  const [mode, setMode] = useState<Mode>('login');
+export default function Auth({ onAuthenticated, initialMode = 'login' }: { onAuthenticated: (user: User) => void; initialMode?: Mode }) {
+  // The header links pick which side of this screen opens; the tabs still switch freely once here.
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [handle, setHandle] = useState(''); const [password, setPassword] = useState(''); const [displayName, setDisplayName] = useState('');
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   // The id has to be confirmed available before signing up, and editing it clears the confirmation so a stale
@@ -34,7 +35,7 @@ export default function Auth({ onAuthenticated }: { onAuthenticated: (user: User
       onAuthenticated(await api<User>(mode === 'signup' ? '/auth/signup' : '/auth/login', { method: 'POST', body: JSON.stringify(body) }));
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
-  return <><div className="eyebrow">WELCOME BACK</div><h1 className="small-heading">{mode === 'login' ? '다시 만나서 반가워요.' : '학습 공간을 만들어요.'}</h1>
+  return <><div className="eyebrow">{mode === 'login' ? 'WELCOME BACK' : 'CREATE YOUR SPACE'}</div><h1 className="small-heading">{mode === 'login' ? '다시 만나서 반가워요.' : '학습 공간을 만들어요.'}</h1>
   <p className="lead">아이디마다 프로필과 과제, 진도가 따로 저장돼요.</p>
   <div className="panel">
     <div className="tabs" aria-label="로그인 또는 회원가입">

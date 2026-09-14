@@ -4,8 +4,10 @@ import { domainLabels, levelLabels, type Message, type PublicAssignment, type Qu
 import { api, downloadText } from './api';
 import CodeLab from './CodeLab';
 import { CATALOG_VERSION, getExercise } from '../shared/catalog';
-export default function Workspace({ assignment: a, messages, aiEnabled, onError, onNotice, onUpdate, onMessages }: { assignment: PublicAssignment; messages: Message[]; aiEnabled: boolean; onError: (value:string)=>void; onNotice:(value:string)=>void; onUpdate:(value:PublicAssignment)=>void; onMessages:(value:Message[])=>void }) {
-  const [tab,setTab] = useState<'practice'|'quiz'|'submit'>('practice');
+type Tab = 'practice'|'quiz'|'submit';
+export default function Workspace({ assignment: a, messages, aiEnabled, onError, onNotice, onUpdate, onMessages, initialTab }: { assignment: PublicAssignment; messages: Message[]; aiEnabled: boolean; onError: (value:string)=>void; onNotice:(value:string)=>void; onUpdate:(value:PublicAssignment)=>void; onMessages:(value:Message[])=>void; initialTab?: string }) {
+  // Which tab the header menu asked for, if it asked for one this page recognises.
+  const [tab,setTab] = useState<Tab>(['practice','quiz','submit'].includes(initialTab || '') ? initialTab as Tab : 'practice');
   const [step,setStep] = useState(Math.max(0,a.lessons.findIndex((_l,i)=>!a.completedSteps.includes(i))));
   const [question,setQuestion] = useState(''); const [chatBusy,setChatBusy] = useState(false); const [busy,setBusy] = useState(false);
   const [answers,setAnswers] = useState<number[]>(Array(a.quiz.length).fill(-1));

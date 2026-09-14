@@ -435,3 +435,71 @@ legend { color: #354861; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* ===========================================================================
+   Top navigation
+   The categories used to live in a left column that collapsed into a
+   horizontally scrolling strip - a scrollbar is a poor way to show five fixed
+   items. They now sit in one bar across the top, each opening its sections
+   underneath. Sign-in moved here too, as plain text links, so the header
+   answers both "where can I go" and "who am I" in one place.
+   =========================================================================== */
+.masthead { position: sticky; top: 0; z-index: 20; background: #fff; border-bottom: 1px solid var(--line); }
+.masthead-inner { max-width: 1320px; margin: 0 auto; padding: 0 48px; height: 66px; display: flex; align-items: center; gap: 28px; }
+.masthead .brand { font-size: 22px; flex-shrink: 0; }
+.masthead .brand-icon { width: 32px; height: 32px; border-radius: 9px; }
+
+.top-nav { display: flex; align-items: stretch; gap: 2px; height: 100%; flex: 1; min-width: 0; }
+.masthead-inner > * { min-width: 0; }
+.top-nav-item { position: relative; display: flex; }
+/* Reset the vertical-list shape the sidebar rules give .nav-item. */
+.top-nav .nav-item { width: auto; margin: 0; padding: 0 14px; height: 100%; border-radius: 0; gap: 8px; white-space: nowrap; font-size: 14px; background: transparent; border-bottom: 2px solid transparent; }
+.top-nav .nav-item:hover { background: transparent; color: var(--green); }
+.top-nav .nav-item.active { background: transparent; color: var(--green); border-bottom-color: var(--green); font-weight: 700; }
+
+/* The submenu. Hidden rather than removed, so focus can reach it. */
+.dropdown { position: absolute; top: 100%; left: 0; min-width: 232px; background: #fff; border: 1px solid var(--line); border-radius: 0 0 12px 12px; border-top: 0;
+  box-shadow: 0 14px 32px rgba(35,50,73,.12); padding: 8px; display: flex; flex-direction: column; gap: 2px;
+  opacity: 0; visibility: hidden; transform: translateY(-6px); transition: opacity .14s ease, transform .14s ease, visibility .14s; }
+.top-nav-item.open .dropdown, .top-nav-item:focus-within .dropdown { opacity: 1; visibility: visible; transform: translateY(0); }
+.dropdown button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 10px 12px; border-radius: 8px; background: transparent; }
+.dropdown button:hover:not(:disabled), .dropdown button:focus-visible { background: var(--ai-soft); }
+.dropdown strong { font-size: 13px; font-weight: 600; color: var(--ink); }
+.dropdown small { font-size: 11px; color: var(--muted); }
+.dropdown button:disabled { cursor: not-allowed; }
+
+.masthead-account { display: flex; align-items: center; gap: 10px; flex-shrink: 0; font-size: 13px; color: var(--muted); }
+.masthead-account .divider { color: #c3cbd7; }
+.greeting { white-space: nowrap; }
+.greeting strong { color: var(--green); font-weight: 700; }
+.link-button { background: transparent; padding: 6px 2px; font-size: 13px; color: var(--muted); }
+.link-button:hover:not(:disabled) { color: var(--green); text-decoration: underline; }
+
+/* The old shell put the page beside a fixed sidebar; it now starts below the bar. */
+.app-shell { display: block; }
+.main { width: 100%; margin-left: 0; }
+.topbar { height: 52px; }
+
+@media (max-width: 1320px) { .masthead-inner { padding: 0 30px; gap: 18px; } .top-nav .nav-item { padding: 0 10px; gap: 6px; } }
+@media (max-width: 1180px) {
+  /* Below this the five Korean labels plus the greeting stop fitting on one line beside the brand, so the
+     bar wraps into two rows rather than scrolling sideways - a scrollbar was the original complaint. */
+  .masthead-inner { height: auto; flex-wrap: wrap; padding: 12px 22px; gap: 10px 16px; }
+  .top-nav { order: 3; width: 100%; flex: 0 0 100%; overflow: visible; }
+  .top-nav .nav-item { padding: 10px 10px; font-size: 13px; }
+  .masthead-account { margin-left: auto; }
+  .dropdown { min-width: 200px; }
+  /* A hover menu has no meaning on touch; the category button itself navigates. */
+  .top-nav-item:not(.open):not(:focus-within) .dropdown { display: none; }
+}
+@media (max-width: 620px) {
+  /* Five Korean labels stop fitting on one line well before the phone widths, so the row wraps onto a
+     second line. Wrapping keeps every category visible at once, which sideways scrolling did not. */
+  .top-nav { gap: 0; flex-wrap: wrap; row-gap: 2px; }
+  .top-nav-item { flex: 1 1 auto; }
+  .top-nav .nav-item { width: 100%; justify-content: center; padding: 9px 8px; font-size: 12px; gap: 5px; }
+  .top-nav .nav-item svg { display: none; }
+  .masthead-inner { padding: 10px 16px; }
+  /* Anchored to the row rather than the button, so a menu opening from the right edge stays on screen. */
+  .dropdown { left: 0; right: 0; min-width: 0; }
+}
