@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play, Square, RotateCcw, Download, CheckCircle2 } from 'lucide-react';
+import { Play, Square, RotateCcw, Download, CheckCircle2, Sparkles, Copy } from 'lucide-react';
 import type { Exercise } from '../shared/catalog';
-import type { PracticeAttempt } from '../shared/schema';
+import type { PracticeAttempt, Profile } from '../shared/schema';
+import { attribution, buildPrompt, canBuild, promptKinds, type BuiltPrompt } from '../shared/prompt-kit';
 import { dataSources } from '../shared/data-sources';
 import { api, downloadText } from './api';
 import { loadDataset } from './data-loader';
@@ -9,7 +10,7 @@ import { compileCode, startRun, type RunHandle, type RunResult } from './runner'
 import { startSqlRun } from './sql-runner';
 import { startRRun } from './r-runner';
 
-export default function CodeLab({ exercise, assignmentId, onSaved }: { exercise: Exercise; assignmentId?: string; onSaved?: (attempt: PracticeAttempt) => void }) {
+export default function CodeLab({ exercise, assignmentId, profile, onSaved }: { exercise: Exercise; assignmentId?: string; profile?: Profile | null; onSaved?: (attempt: PracticeAttempt) => void }) {
   const isSql = exercise.language === 'sql';
   const isR = exercise.language === 'r';
   const [code,setCode] = useState(exercise.starter);
@@ -19,10 +20,11 @@ export default function CodeLab({ exercise, assignmentId, onSaved }: { exercise:
   const [busy,setBusy] = useState(false); const [loading,setLoading] = useState(false);
   const [saving,setSaving] = useState(false); const [saved,setSaved] = useState('');
   const [error,setError] = useState(''); const [hint,setHint] = useState(0);
+  const [prompt,setPrompt] = useState<BuiltPrompt | null>(null); const [copied,setCopied] = useState('');
   const host = useRef<HTMLDivElement>(null); const active = useRef<RunHandle | null>(null);
   const generation = useRef(0); const dataGeneration = useRef(0);
   useEffect(() => () => { generation.current++; dataGeneration.current++; active.current?.cancel(); },[]);
-  function invalidate() { generation.current++; active.current?.cancel(); active.current = null; setBusy(false); setResult(null); setSaved(''); setError(''); }
+  function invalidate() { generation.current++; active.current?.cancel(); active.current = null; setBusy(false); setResult(null); setSaved(''); setError(''); setPrompt(null); setCopied(''); }
   function edit(value: string) { invalidate(); setCode(value); }
   async function run() {
     invalidate(); const current = generation.current; setBusy(true);
@@ -73,6 +75,12 @@ export default function CodeLab({ exercise, assignmentId, onSaved }: { exercise:
     {error&&<p className="inline-error" role="alert">{error}</p>}
     <div className="console-panel" aria-live="polite"><strong>실행 콘솔</strong>{result?<><pre>{result.error || `샘플 실행 결과\n${result.preview ?? ''}`}{result.logs.length?`\n\n${result.logs.join('\n')}`:''}</pre><p>{result.tests.filter(t=>t.passed).length} / {exercise.tests.length} 테스트 통과</p></>:<p>코드를 실행하면 출력과 테스트 결과가 여기에 표시됩니다.</p>}</div>
     {result&&<div className="test-results">{result.tests.map((test,i)=><details key={i} open={!test.passed} className={test.passed?'test-pass':'test-fail'}><summary>{test.passed?'통과':'확인 필요'} · {test.name}</summary><p>기대: <code>{test.expected}</code></p><p>실제: <code>{test.actual}</code></p>{!test.passed&&<p>{test.hint}</p>}</details>)}<p className="small-note">테스트와 준비된 힌트에 기반한 피드백입니다. LLM 평가가 아니며 모든 입력의 정확성을 보증하지 않습니다.</p><button className="secondary" disabled={saving||busy} onClick={()=>void save()}><CheckCircle2 size={16}/>{saving?'저장 중…':'학습 기록 저장'}</button></div>}
+    <section className="prompt-kit">
+      <strong><Sparkles size={15}/> LLM에게 물어볼 프롬프트 만들기</strong>
+      <p className="small-note">지금 실습의 요구사항, 내 코드, 실패한 테스트를 한 덩어리로 묶어 줍니다. 복사해서 쓰시는 AI에 그대로 붙여넣으세요. 정답을 바로 받지 않고 원인부터 짚도록 요청하는 문장이 함께 들어갑니다.</p>
+      <div className="lab-actions">{promptKinds.map(k=>{const ready=canBuild(k.id,result);return <button key={k.id} className="secondary" disabled={!ready} title={ready?k.description:'코드를 한 번 실행하면 사용할 수 있어요.'} onClick={()=>{setCopied('');setPrompt(buildPrompt(k.id,{exercise,code,result,profile}));}}>{k.label}</button>;})}</div>
+      {prompt&&<div className="prompt-output"><div><strong>{prompt.label} 프롬프트</strong><button className="text-button" onClick={async()=>{try{await navigator.clipboard.writeText(prompt.text);setCopied('프롬프트를 복사했어요.');}catch{setCopied('복사하지 못했어요. 아래 내용을 직접 선택해 복사해 주세요.');}}}><Copy size={14}/> 복사</button></div>{prompt.notes.map(n=><p className="small-note" key={n}>{n}</p>)}<pre>{prompt.text}</pre><p className="small-note">{attribution(prompt.persona)}</p>{copied&&<p role="status" className="small-note">{copied}</p>}</div>}
+    </section>
     {saved&&<p role="status" className="small-note">{saved}</p>}
     <div className="lab-hints"><button className="text-button" disabled={hint>=exercise.hints.length} onClick={()=>setHint(n=>n+1)}>힌트 보기 ({hint}/{exercise.hints.length})</button>{exercise.hints.slice(0,hint).map(text=><p key={text}>{text}</p>)}</div>
     <div ref={host}/>

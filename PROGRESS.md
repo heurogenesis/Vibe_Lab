@@ -639,3 +639,65 @@ CSP 변경: script-src에 'wasm-unsafe-eval' 추가. WebAssembly 컴파일만 �
   5) PostgreSQL 경로는 실제 DB 대상 미검증.
 사용자 승인 또는 결정이 필요한 사항: 없음.
 ```
+
+### 2026-09-14 (12차) 실습 화면에 LLM 질문 프롬프트 생성 버튼 (prompts.chat 연동)
+
+```text
+날짜 / 담당 AI: 2026-09-14 / Claude Code
+작업 목적: 학습 중 오류나 동작이 막혔을 때, 학습자가 외부 LLM에 붙여넣을 프롬프트를 앱이 만들어 주기.
+  사용자 요청: "에러나 오류, 코드 수정, 동작설명 등 옆에 프롬프트 생성 버튼", prompts.chat 연동 고려.
+브랜치: feature/mvp-savepoint-20260912
+추가한 의존성: 없음.
+변경 파일:
+  shared/prompt-kit.ts(신규) - 프롬프트 빌더. 페르소나 3종 + 문맥 조립
+  src/CodeLab.tsx - 실행 콘솔·테스트 결과 아래에 버튼 3개와 미리보기·복사
+  src/styles.css - .prompt-kit / .prompt-output
+  src/Workspace.tsx - CodeLab 에 profile 전달(한 줄)
+  tests/prompt-kit.test.ts(신규) - 8개
+
+prompts.chat 연동 조사 결과(브라우저 실측):
+  - 라이선스: 코드 MIT, 프롬프트 데이터는 CC0 1.0. 그대로 가져다 쓰는 것이 허용됨.
+  - prompts.chat 도메인 직접 fetch -> 실패. CORS 헤더를 주지 않음. /prompts.csv, /api/mcp 모두 브라우저에서 막힘.
+  - 원본 GitHub raw 의 prompts.csv -> 성공(status 200). 교차 출처 격리 상태에서도 정상.
+    10차 기록에 "COEP 때문에 교차 출처 리소스가 막힌다"고 적었던 것은 범위가 틀렸음.
+    COEP require-corp 가 막는 것은 no-cors 로드이고, CORS 를 허용하는 출처는 그대로 통과함.
+    실제로 이 앱은 격리 이후에도 GitHub raw 데이터셋(P0-03)을 계속 받고 있었음.
+  - 다만 prompts.csv 가 현재 2,170행 / 5.7MB. 페르소나 3개 때문에 학습자마다 5.7MB 를 받게 할 수 없음.
+  결론: CC0 이므로 필요한 3개를 act 이름·기여자와 함께 원문 그대로 저장소에 동봉.
+    화면에 출처·라이선스를 함께 표시함. 런타임 네트워크 의존 없음.
+
+설계의 핵심 - 페르소나는 빌려오고 문맥은 우리가 만든다:
+  prompts.chat 의 프롬프트는 역할 설정("Act as a senior debugging engineer...")이지 문맥이 없음.
+  쓸모를 만드는 쪽은 앱이 이미 아는 것들임: 실습의 요구사항, 학습자가 쓴 코드, 어떤 테스트가
+  무엇을 기대했는데 무엇이 나왔는지, 전공·직무·레벨. "왜 안 되죠"와 실패한 테스트를 붙인 질문은
+  돌아오는 답이 다름. prompts.chat 이 자기 자리표시자를 ${...} 로 표시해 두는 관례가
+  마침 "여기에 네 상황을 넣어라"와 정확히 맞아서, 그 자리를 우리 문맥 블록으로 치환함.
+버튼 3종과 활성 조건:
+  오류 해결(Debugging Detective) - 실행 오류가 있거나 실패한 테스트가 있을 때만
+  코드 수정(Code Reviewer) - 한 번이라도 실행한 뒤
+  동작 설명(Explainer with Analogies) - 항상. 실행 전에도 개념을 물을 수 있어야 함
+  실행하지 않은 상태에서 "내 오류는 이겁니다"라고 시작하는 프롬프트는 없느니만 못해서 막음.
+정답 유출 방지: 세 프롬프트 모두 "완성된 정답 코드를 먼저 주지 말고"를 포함함.
+  실습의 hints 는 프롬프트에 넣지 않음. 테스트가 그것까지 검사함.
+크기 제한: 코드 6,000자, 실패 테스트 3개, 기대/실제 각 600자, 오류 1,200자.
+검증 명령과 실제 결과:
+  - npm run typecheck: 통과
+  - npm test: 188 passed | 1 skipped (11차 180 -> 188)
+  - npm run build: 통과. 앱 번들 479.73 -> 489.78 kB
+    (처음에는 tsconfig.server.json(nodenext)에서 TS2835 로 실패함. shared/ 는 서버 빌드에도
+     들어가므로 상대 import 에 .js 확장자가 필요. catalog.js / schema.js 로 수정)
+  - 브라우저 실측(프로필 언어 R, science:quality:r):
+      실행 전 -> 동작 설명만 활성, 나머지 둘 비활성
+      오답 실행(1/4 통과) 후 -> 셋 다 활성
+      "오류 해결" 클릭 -> 페르소나 원문 + 상황(언어·런타임·요구사항·배경) + 내 R 코드 +
+        실패 테스트 3개의 기대/실제 + 원하는 답변 5줄이 한 덩어리로 생성됨
+        ${describe_your_bug_here} 자리표시자가 남지 않고 치환됨을 확인
+      출처 표기 "페르소나 문구 출처: prompts.chat · "Debugging Detective" (mikeaitrends24) · CC0-1.0" 노출
+      가로 스크롤 없음(body.scrollWidth == clientWidth), 프롬프트 영역은 세로 스크롤로 처리
+남은 문제 / 다음 작업:
+  1) prompts.chat 최신 목록 불러오기(선택 기능)는 미구현. GitHub raw 를 브라우저에서 직접 받는 방식이며,
+     CSP connect-src 에 raw.githubusercontent.com 추가가 필요함(server/app.ts, 승인 대상). 사용자 승인 대기.
+  2) 생성된 프롬프트를 튜터 채팅으로 바로 보내는 경로는 없음. 복사 붙여넣기만 지원.
+  3) 11차에서 기록한 "이 과제가 나에게 맞는 이유" 칩의 TypeScript 고정 문구는 아직 그대로.
+사용자 승인 또는 결정이 필요한 사항: 위 1) 의 CSP connect-src 추가.
+```

@@ -28,3 +28,10 @@
 .library-search input { min-width: 0; }
 @media (max-width: 800px) { .library-filters { grid-template-columns: 1fr; } .code-editor { font-size: 12px; } }
 .availability{display:inline-flex;align-items:center;gap:6px;font-size:12px}.availability.ok{color:#4e683f}.availability.taken{color:#933e2b}
+.prompt-kit { margin-top: 22px; background: #f3f6f2; border: 1px solid #e0e7dd; border-radius: 10px; padding: 18px; }
+.prompt-kit > strong { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.prompt-kit .lab-actions { margin-bottom: 0; }
+.prompt-output { margin-top: 14px; border-top: 1px solid #e0e7dd; padding-top: 14px; }
+.prompt-output > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+.prompt-output > div:first-child strong { font-size: 13px; }
+.prompt-output pre { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 15px; margin: 10px 0; max-height: 380px; overflow: auto; font: 12px/1.75 Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
