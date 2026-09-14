@@ -42,7 +42,7 @@ describe('learner workflow via HTTP',()=> {
     expect((await store.read()).assignments[0].completedSteps).toEqual([0]);
     await agent.patch(`/api/assignments/${a.id}/progress`).set('X-Vibe-Lab','1').send({step:99,completed:true}).expect(400);
     await agent.post(`/api/assignments/${a.id}/quiz`).set('X-Vibe-Lab','1').send({answers:[0,0]}).expect(400);
-    const graded = await agent.post(`/api/assignments/${a.id}/quiz`).set('X-Vibe-Lab','1').send({answers:[1,0,2]}).expect(200);
+    const graded = await agent.post(`/api/assignments/${a.id}/quiz`).set('X-Vibe-Lab','1').send({answers:(await store.read()).assignments[0].quiz.map(q=>q.answer)}).expect(200);
     expect(graded.body.score).toBe(3);
     const chat = await agent.post(`/api/assignments/${a.id}/chat`).set('X-Vibe-Lab','1').send({message:'원리를 설명해 줘',lessonIndex:0}).expect(200);
     expect(chat.body[1].source).toBe('rules'); expect(chat.body[1].content).toContain('타입');

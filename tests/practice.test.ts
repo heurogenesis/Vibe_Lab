@@ -33,6 +33,9 @@ async function execute(exercise:Exercise,source:string):Promise<RunResult>{
 function reference(exercise:Exercise){
  const d=[...disciplines,projectDiscipline].find(d=>d.id===exercise.disciplineId)!;
  const valid=`typeof v==='number' && Number.isFinite(v)`;
+ if(exercise.theme==='median')return `function solve(rows){const a=rows.map(r=>r.value).filter(v=>typeof v==='number'&&Number.isFinite(v)).sort((a,b)=>a-b);return !a.length?null:a.length%2?a[Math.floor(a.length/2)]:(a[a.length/2-1]+a[a.length/2])/2;}`;
+ if(exercise.theme==='trend')return `function solve(rows){return rows.map((_,i)=>{const a=rows.slice(Math.max(0,i-2),i+1).map(r=>r.value).filter(v=>typeof v==='number'&&Number.isFinite(v));return a.length?a.reduce((s,v)=>s+v,0)/a.length:null;});}`;
+ if(exercise.theme==='normalize')return `function solve(rows){return rows.map(r=>typeof r.value==='number'&&Number.isFinite(r.value)?(r.value-(${d.min}))/(${d.max}-(${d.min})):null);}`;
  if(exercise.theme==='clean')return `function solve(rows){let sum=0,count=0;for(const row of rows){const v=row.value;if(${valid} && v>=${d.min} && v<=${d.max}){sum+=v;count++;}}return count?sum/count:null;}`;
  if(exercise.theme==='compare')return `function solve(rows){const groups=new Map();for(const row of rows){if(!groups.has(row.group))groups.set(row.group,[]);const v=row.value;if(${valid})groups.get(row.group).push(v);}return Object.fromEntries([...groups].map(([key,values])=>[key,values.length?values.reduce((a,b)=>a+b,0)/values.length:null]));}`;
  if(exercise.theme==='quality')return `function solve(rows){const values=rows.map(r=>r.value).filter(v=>${valid});const accepted=values.filter(v=>v>=${d.min} && v<=${d.max}).length;return {observed:values.length,accepted,rate:values.length?accepted/values.length:null};}`;

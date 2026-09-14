@@ -1,3 +1,4 @@
+import { readQuestionBank } from './learning-content-store.js';
 import express from 'express';
 import helmet from 'helmet';
 import { ipKeyGenerator, rateLimit } from 'express-rate-limit';
@@ -99,7 +100,7 @@ export function createApp(users: UserStore, ai: LearningAI, github: GitHubClient
   app.post('/api/assignments', expensive, async (req, res) => { const store = workspaceOf(req);
     const state = await store.read(); if (!state.profile) throw new ApiError(400, '학습 프로필을 먼저 저장해 주세요.');
     if (state.assignments.length >= 100) throw new ApiError(409, '로컬 과제 보관 한도(100개)에 도달했습니다.');
-    const generated = await ai.generate(state.profile, state.assignments);
+    const generated = await ai.generate(state.profile, state.assignments, await readQuestionBank(users.pool));
     const assignment = createAssignment(generated.curriculum, state.profile, generated.source);
     await store.update(current => { if (current.assignments.length >= 100) throw new ApiError(409, '과제 보관 한도에 도달했습니다.'); current.assignments.unshift(assignment); });
     res.status(201).json(publicAssignment(assignment));

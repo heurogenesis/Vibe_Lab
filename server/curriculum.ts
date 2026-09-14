@@ -1,3 +1,4 @@
+import { generalQuiz, type QuestionTemplate } from './question-bank.js';
 import { randomUUID } from 'node:crypto';
 import { type Assignment, type Curriculum, type Profile, styleLabels } from '../shared/schema.js';
 import { CATALOG_VERSION, recommendation, usesPractice } from '../shared/catalog.js';
@@ -7,8 +8,8 @@ const projects = {
   data: { title: '숫자를 인사이트로 바꾸는 지표 대시보드', entity: '측정 기록', fields: '날짜, 분류, 측정값', analogy: '스프레드시트의 행과 열', scenario: '측정값을 등록하고, 분류별 평균을 계산하고, 필터로 비교' },
   education: { title: '배운 것을 오래 기억하는 학습 카드', entity: '학습 카드', fields: '질문, 답변, 복습 상태', analogy: '과목별로 정리한 학습 노트', scenario: '카드를 등록하고, 답을 가린 채 복습하고, 이해도를 기록' }
 };
-export function generateRules(profile: Profile, previous: Assignment[]): Curriculum {
-  if (usesPractice(profile)) return generatePracticeCurriculum(profile, previous);
+export function generateRules(profile: Profile, previous: Assignment[], bank?: QuestionTemplate[]): Curriculum {
+  if (usesPractice(profile)) return generatePracticeCurriculum(profile, previous, bank);
   const project = projects[profile.domain];
   const latest = previous[0];
   const needsReview = !!latest?.quizResult && latest.quizResult.score / latest.quizResult.total < 0.67;
@@ -24,12 +25,8 @@ export function generateRules(profile: Profile, previous: Assignment[]): Curricu
   ];
   if (difficulty !== 'beginner') lessons.push({ title: '한 단계 더: 실패와 중복 다루기', description: '실제 업무에서 발생할 수 있는 중복 요청과 예외를 다룹니다.', objective: '중복 등록을 막는 제약 조건과 API 통합 테스트를 추가합니다.', prompt: `${context} 만든 서비스에 중복 등록 방지 제약과 통합 테스트를 추가해 줘. 성공, 잘못된 입력, 중복 요청 사례를 검증해 줘. ${scaffold}`, theory: '클라이언트의 버튼 비활성화만으로 중복을 완전히 막을 수 없습니다. 서버와 DB에서 불변 조건을 지켜야 여러 요청이 동시에 와도 일관성이 유지됩니다. 통합 테스트는 실제 경계를 통과한 결과를 확인합니다.', experiment: '같은 요청을 거의 동시에 두 번 보내고 DB에 몇 개가 저장되는지 확인하세요.', checks: ['중복 요청의 결과가 일관적이다', '성공과 실패 테스트를 모두 실행했다'] });
   return { title: project.title, summary: `${profile.role}에서 익숙한 문제를 출발점으로 ${project.scenario}하는 웹 앱을 만듭니다. 목표: ${profile.goal}`, rationale: `${profile.major} · ${profile.role} 경험을 ${project.analogy}에 연결합니다. '${styleLabels[profile.style]}' 방식과 회당 ${profile.minutes}분에 맞춰 ${lessons.length}회로 나눕니다.${needsReview ? ' 이전 이해도 확인에서 어려웠던 기초를 다시 다룹니다.' : ready ? ' 이전 과제의 단계와 이해도 확인을 마쳐 확장 실습을 포함합니다.' : ''}`, difficulty, minutes: profile.minutes * lessons.length, concepts: ['TypeScript 타입', 'React 상태', 'HTTP 요청·응답', '입력 검증', 'PostgreSQL', 'Git 기록'], lessons,
-    quiz: [
-      { question: 'React state에만 저장한 데이터가 새로고침 후 사라지는 이유는?', options: ['서버의 권한 설정이 바뀌어서', 'state가 브라우저 메모리에만 있었기 때문에', 'TypeScript가 데이터를 삭제해서', 'GitHub에 올리지 않아서'], answer: 1, explanation: '컴포넌트의 state는 메모리의 값입니다. 지속하려면 서버의 데이터베이스 같은 영구 저장소에 기록하고 다시 조회해야 합니다.' },
-      { question: 'TypeScript를 사용해도 서버에서 입력을 검증해야 하는 이유는?', options: ['외부 요청의 데이터는 런타임 타입 검사를 자동으로 받지 않아서', 'TypeScript가 SQL을 실행하기 때문에', 'React가 서버 코드를 수정해서', 'HTTP는 숫자를 전달할 수 없어서'], answer: 0, explanation: 'TypeScript 타입은 실행 시 제거됩니다. 외부 입력은 Zod 같은 런타임 검증 도구와 DB 제약 조건으로 확인해야 합니다.' },
-      { question: 'SQL에 사용자 입력을 안전하게 전달하는 방법은?', options: ['입력을 SQL 문자열 뒤에 붙인다', '프론트엔드에서만 검사한다', '매개변수화된 쿼리의 값으로 전달한다', '모든 입력을 숨긴다'], answer: 2, explanation: 'SQL 구조와 데이터를 분리하면 입력이 SQL 명령으로 해석되는 것을 막을 수 있습니다. 예: WHERE id = $1, [id].' }
-    ] };
+    quiz: generalQuiz(profile, previous, bank) };
 }
 export function createAssignment(curriculum: Curriculum, profile: Profile, source: Assignment['source']): Assignment {
-  return { ...curriculum, id: randomUUID(), createdAt: new Date().toISOString(), source, profile: structuredClone(profile), completedSteps: [], ...(source === 'rules' && usesPractice(profile) ? { practice: { catalogVersion: CATALOG_VERSION, exerciseIds: recommendation(profile).exerciseIds } } : {}) };
+  return { ...curriculum, id: randomUUID(), createdAt: new Date().toISOString(), source, profile: structuredClone(profile), completedSteps: [], ...(source === 'rules' && usesPractice(profile) ? { practice: (curriculum as Partial<Assignment>).practice || { catalogVersion: CATALOG_VERSION, exerciseIds: recommendation(profile).exerciseIds } } : {}) };
 }

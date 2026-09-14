@@ -969,3 +969,17 @@ UI 작업 (두 단계):
 - 검증: 해당 서버·인증·AI·마이그레이션·빌드·CI 코드를 읽고 공식 Cloudflare/AWS/OpenAI/node-postgres 문서와 대조. 문서 작업이므로 빌드/테스트 재실행 없음. 직전 UI 커밋 빌드 통과와 과거 테스트 기록을 신규 검증으로 취급하지 않았습니다. 실제 AWS/공개 터널/API 연결 검증은 이번에 수행하지 않았습니다.
 - Git/공유: 위 문서 4개만 로컬 커밋으로 기록하며 Push·main 병합은 하지 않습니다. 기존 미추적 .claude/ 보존.
 - 다음 시작점: ROADMAP FREE-01~04. 실제 API 키를 채팅으로 받지 않고 사용 조건을 먼저 확인. 추가 비용을 발생시키는 리소스 생성 없음.
+
+
+### 2026-09-15 · CONTENT-01 / Codex — 실습 다양화·DB 문제 은행
+
+- 사용자 명시적 구현 요청에 따라 제품 코드 수정. 기준 32cd887, 기존 .claude/ 보존.
+- 원인: practice-curriculum.ts와 curriculum.ts에 동일한 고정 이해도 3문항이 존재했음.
+- 구현: 중앙값·최근 3개 행 이동평균·고정 기준 정규화 54개 TypeScript 실습 추가. 전체 234개(126 TS / 54 SQL / 54 R). 신규 ID만 추가하여 기존 실행 계약 버전은 유지.
+- 문제 은행: 27개 계산/개념 템플릿, 234개 예제 묶음(각 3개 문제·해설·매개변수). 실제 로컬 PostgreSQL vibelab에 저장 완료. 학습자 기록은 수정하지 않음.
+- 생성 경로: PostgreSQL 템플릿 조회 → 실습별 수치/유형/선택지 순환 → 과제 스냅샷 저장. 예제 풀이와 평가 수치는 분리. 후속 TS 과제에 신규 알고리즘 순환, SQL/R은 지원 테마 유지. 이전 과제·채점 결과 보존.
+- 미래 API: 검증된 매개변수와 허용 계산기로 정답 재계산하는 서버 함수 제공. 공개 편집 API·LLM 자동 출제 호출은 이번 범위에 없음. DB 예제 저장본과 브라우저 실행 카탈로그 경계는 docs/CONTENT_BANK.md에 명시.
+- 실제 검증: 초기 4개 정규화 참조 테스트의 음수 하한 문자열 보간 오류를 수정. 앱 계정 CREATE DATABASE 권한이 없어 새 테스트 DB 생성은 실패했고, 이미 있는 별도 vibelab_test로 전환. 최종 전체 249 passed / 0 skipped. npm run build 통과(기존 Zod 주석·큰 청크 경고 유지). 실제 Chrome 신규 화면 검수는 미수행.
+- 변경: shared/catalog.ts, shared/extended-exercises.ts; server/question-bank.ts, learning-content-store.ts, seed-learning-content.ts, practice-curriculum.ts, curriculum.ts, ai.ts, app.ts; tests/question-bank.test.ts, content-postgres.test.ts, practice.test.ts, learning.test.ts; README.md, docs/CONTENT_BANK.md, PROGRESS.md.
+- Git/공유: 위 변경을 작업 브랜치에 로컬 커밋. 원격 Push·main 병합 없음. 실제 DB 내용은 Git에 올라가지 않으며 seed 스크립트로 재현.
+- 다음: 화면 새로고침 후 새 맞춤 과제 또는 자료실 신규 테마에서 확인. 다른 환경에서는 기존 DB 마이그레이션 뒤 seed-learning-content.ts 실행 필요. 무료 평가 공개와 API 사용량 제한 작업은 미완료 상태 유지.
