@@ -1,5 +1,19 @@
 import { z } from 'zod';
 export const profileSchema = z.object({
+  // Open string by design: content ids must be addable without a schema migration. Unrecognised values are
+  // resolved to a known category in shared/taxonomy.ts rather than rejected here.
+  personaId: z.string().trim().min(1).max(80).optional(),
+  disciplineId: z.string().trim().min(1).max(80).optional(),
+  // Explicit override for the role classified from the free-text job title. See shared/taxonomy.ts.
+  roleId: z.string().trim().min(1).max(80).optional(),
+  // Vibe coding dimensions. Open strings like every other content id: unknown values resolve to a default
+  // rather than failing validation, so a new language or output target ships without a migration.
+  languageId: z.string().trim().min(1).max(40).optional(),
+  outputTargetId: z.string().trim().min(1).max(40).optional(),
+  promptSkillId: z.string().trim().min(1).max(40).optional(),
+  aiTools: z.array(z.string().trim().min(1).max(40)).max(6).optional(),
+  environments: z.array(z.string().trim().min(1).max(40)).max(8).optional(),
+  interests: z.array(z.string().trim().min(1).max(80)).max(10).optional(),
   name: z.string().trim().min(1).max(40), major: z.string().trim().min(1).max(80), role: z.string().trim().min(1).max(80),
   level: z.enum(['beginner', 'intermediate', 'advanced']), style: z.enum(['hands-on', 'concept-first', 'guided']),
   domain: z.enum(['business', 'data', 'education']), goal: z.string().trim().min(5).max(500),
@@ -22,10 +36,12 @@ export const curriculumSchema = z.object({
 export type Curriculum = z.infer<typeof curriculumSchema>;
 export type QuizResult = { score: number; total: number; feedback: { correct: boolean; answer: number; explanation: string }[] };
 export type Submission = { url: string; reflection: string; submittedAt: string; evidence: { name: string; defaultBranch: string; pushedAt: string; commit: string | null; commitMessage: string | null; readme: boolean; files: string[]; workflow: string | null; warnings: string[] } };
-export type Assignment = Curriculum & { id: string; createdAt: string; source: 'rules' | 'ai'; profile: Profile; completedSteps: number[]; quizResult?: QuizResult; submission?: Submission };
+export type PracticePlan = { catalogVersion: string; exerciseIds: string[] };
+export type PracticeAttempt = { exerciseId: string; version: string; passed: number; total: number; status: 'passed' | 'failed' | 'error'; dataSourceId: string; recordedAt: string; verification: 'browser-reported' };
+export type Assignment = Curriculum & { id: string; createdAt: string; source: 'rules' | 'ai'; profile: Profile; completedSteps: number[]; quizResult?: QuizResult; submission?: Submission; practice?: PracticePlan; practiceAttempts?: PracticeAttempt[] };
 export type PublicAssignment = Omit<Assignment, 'quiz'> & { quiz: { question: string; options: string[] }[] };
 export type Message = { id: string; assignmentId: string; role: 'user' | 'assistant'; content: string; createdAt: string; source?: 'rules' | 'ai' };
-export type LearningState = { profile: Profile | null; assignments: Assignment[]; messages: Message[] };
+export type LearningState = { profile: Profile | null; assignments: Assignment[]; messages: Message[]; practiceHistory?: PracticeAttempt[] };
 export type PublicState = Omit<LearningState, 'assignments'> & { assignments: PublicAssignment[] };
 export type Health = { storage: 'postgresql' | 'demo-file'; ai: boolean; githubAuthenticated: boolean; localOnly: true };
 export type Repository = { fullName: string; description: string; url: string; language: string | null; stars: number; license: string | null; updatedAt: string; isTemplate: boolean };
@@ -33,3 +49,21 @@ export const defaultProfile: Profile = { name: '학습자', major: '경영학', 
 export const levelLabels = { beginner: '입문', intermediate: '기초 경험 있음', advanced: '개발 경험 있음' };
 export const styleLabels = { 'hands-on': '직접 만들며 배우기', 'concept-first': '원리를 먼저 이해하기', guided: '단계별 안내 따라가기' };
 export const domainLabels = { business: '업무 자동화', data: '데이터 활용', education: '교육·학습' };
+// Accounts layer. The single-learner state above is unchanged; accounts wrap it so every learner gets an
+// isolated workspace, and the session decides which one a request may touch.
+// See docs/MULTI_USER_DESIGN.md.
+export const STORE_VERSION = 3;
+// An account id is 7-24 characters and must mix letters and digits, so it never reads like a display nickname.
+export const userHandleSchema = z.string().trim()
+  .min(7, '아이디는 7자 이상이어야 해요.').max(24, '아이디는 24자까지 쓸 수 있어요.')
+  .regex(/^[A-Za-z0-9]+$/, '아이디는 영문과 숫자만 사용할 수 있어요.')
+  .regex(/[A-Za-z]/, '아이디에 영문을 포함해 주세요.')
+  .regex(/[0-9]/, '아이디에 숫자를 포함해 주세요.');
+export const passwordSchema = z.string().min(8, '비밀번호는 8자 이상이어야 해요.').max(128);
+export const nicknameSchema = z.string().trim().min(1, '닉네임을 입력해 주세요.').max(40);
+export const signupSchema = z.object({ handle: userHandleSchema, password: passwordSchema, displayName: nicknameSchema }).strict();
+export const loginSchema = z.object({ handle: z.string().trim().min(1).max(24), password: z.string().min(1).max(128) }).strict();
+export type User = { id: string; handle: string; displayName: string; createdAt: string };
+// Never leaves the server. The public User above is the only shape the client ever receives.
+export type StoredUser = User & { passwordHash: string };
+export type MultiUserState = { version: number; users: StoredUser[]; workspaces: Record<string, LearningState> };

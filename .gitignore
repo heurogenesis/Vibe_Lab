@@ -5,3 +5,12 @@ dist-server/
 .data/
 coverage/
 .sites-runtime/
+
+# Self-hosted R runtime, copied from node_modules at build time
+dist/webr/
+
+
+# 로컬 개발 서버 로그
+dev.log
+prod-server.log
+cloudflared-quick.log
