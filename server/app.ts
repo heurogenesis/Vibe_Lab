@@ -25,6 +25,11 @@ function workspaceOf(req: express.Request): Store {
 }
 export function createApp(users: UserStore, ai: LearningAI, github: GitHubClient, options: { port?: number; githubAuthenticated?: boolean } = {}) {
   const app = express(); app.disable('x-powered-by');
+  // Trust only the loopback hop: this process only ever receives connections from a same-machine proxy
+  // (Cloudflare Tunnel's cloudflared, or none in local dev). That proxy terminates TLS and forwards plain
+  // HTTP, so without this Express sees every request as insecure and express-session's `secure` cookie
+  // option silently drops Set-Cookie entirely (documented express-session behavior, not a bug there).
+  app.set('trust proxy', 'loopback');
   app.get('/practice-sandbox.html', (_req,res) => {
     // A document embedded in a cross-origin isolated page must carry the policy itself, or the browser refuses
     // to load the frame. This is what keeps the JavaScript practice sandbox working once COEP is on.
@@ -39,11 +44,16 @@ export function createApp(users: UserStore, ai: LearningAI, github: GitHubClient
     // SQL practice runs SQLite compiled to WebAssembly in a worker; compiling it requires wasm-unsafe-eval,
     // which allows WebAssembly compilation and nothing else. JavaScript eval stays blocked.
     'script-src': ["'self'", "'wasm-unsafe-eval'"], 'worker-src': ["'self'", 'blob:'], 'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'], 'connect-src': ["'self'", ...new Set(dataSources.map(s => new URL(s.url).origin))], 'frame-src': ["'self'"], 'upgrade-insecure-requests': null } } }));
+  // PUBLIC_ORIGIN opts a single deployment into being reachable through a tunnel/proxy (e.g. Cloudflare
+  // Tunnel). Unset, behavior is unchanged: localhost only. Set, it adds exactly that one origin/host - never
+  // a wildcard - so the check still rejects arbitrary Host headers instead of trusting whatever the proxy forwards.
+  const publicOrigin = process.env.PUBLIC_ORIGIN;
+  const publicHost = publicOrigin ? new URL(publicOrigin).hostname : undefined;
   app.use('/api', (req, res, next) => {
     const host = req.hostname;
-    if (!['127.0.0.1', 'localhost', '[::1]', '::1'].includes(host)) return res.status(403).json({ error: '로컬 접속만 허용됩니다.' });
+    if (!['127.0.0.1', 'localhost', '[::1]', '::1', publicHost].includes(host)) return res.status(403).json({ error: '로컬 접속만 허용됩니다.' });
     const origin = req.get('origin');
-    const allowed = ['http://127.0.0.1:5173', 'http://localhost:5173', `http://127.0.0.1:${options.port || 3001}`, `http://localhost:${options.port || 3001}`];
+    const allowed = ['http://127.0.0.1:5173', 'http://localhost:5173', `http://127.0.0.1:${options.port || 3001}`, `http://localhost:${options.port || 3001}`, ...(publicOrigin ? [publicOrigin] : [])];
     if (origin && !allowed.includes(origin)) return res.status(403).json({ error: '허용되지 않은 요청 출처입니다.' });
     if (!['GET', 'HEAD'].includes(req.method) && req.get('X-Vibe-Lab') !== '1') return res.status(403).json({ error: '요청 검증 헤더가 필요합니다.' });
     res.set('Cache-Control', 'no-store'); next();

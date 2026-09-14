@@ -794,3 +794,65 @@ prompts.chat 연동 조사 결과(브라우저 실측):
   3) ROADMAP의 P0-02(네트워크/CSP 경계), P0-03(외부 데이터 장애 시나리오)은 여전히 미완.
 사용자 승인 또는 결정이 필요한 사항: 없음.
 ```
+
+### 2026-09-14 (16차) Cloudflare Tunnel로 외부 공개 + 터널 뒤에서 세션이 끊기던 버그 수정
+
+```text
+날짜 / 담당 AI: 2026-09-14 / Claude Code
+작업 목적: 사용자 요청 "CloudFlare로 server를 설정하여 배포 가능하도록". 사용자가 네 가지 구성 중
+  Cloudflare Tunnel을 선택함(Workers 전면 이식은 Express/Passport/pg/webR가 Workers 런타임에서
+  그대로 돌지 않아 제외).
+브랜치: feature/mvp-savepoint-20260912
+변경 파일(승인 대상이라 사전에 이유·영향을 설명하고 진행):
+  server/app.ts - (1) PUBLIC_ORIGIN 환경변수가 설정된 경우에만 그 호스트/오리진 하나를 허용 목록에
+    추가. 와일드카드가 아니라 정확히 한 개만 허용하므로 임의 Host 헤더는 여전히 403.
+    미설정 시 기존 로컬 전용 동작 그대로(하위 호환).
+    (2) app.set('trust proxy', 'loopback') - 아래 버그의 실제 수정.
+  server/auth.ts - 세션 쿠키 secure 플래그를 PUBLIC_ORIGIN 설정 여부에 연동.
+  .env(미커밋) - SESSION_SECRET 고정값 추가(재시작마다 전원 로그아웃되던 문제 해소), PUBLIC_ORIGIN.
+
+구성: Quick Tunnel(도메인 없이 *.trycloudflare.com 임시 주소). 사용자가 도메인을 보유하지 않아
+  named tunnel의 Public Hostname 단계를 완료할 수 없었음. named tunnel 서비스(Cloudflared)는
+  설치만 된 채 경로 없이 유휴 상태로 남아 있음 - 도메인 구입 시 그대로 사용 가능.
+  프로덕션 모드로 전환: npm run build 후 npm start. Express가 dist/를 함께 서빙하므로 프런트와 API가
+  단일 오리진이 되고, 터널은 localhost:3001 하나만 바라봄. Express는 여전히 127.0.0.1 바인딩이며
+  포트를 외부에 여는 것이 아니라 cloudflared가 아웃바운드로 연결함.
+
+브라우저 실측 중 발견해 고친 버그 (server/app.ts):
+  증상 - 터널 주소로 회원가입하면 201이 오는데 곧바로 /api/auth/session이 401. 응답에 Set-Cookie가
+    아예 없었음. 로컬 직접 접속(127.0.0.1:3001)에서도 동일하게 재현됨.
+  원인 - express-session은 cookie.secure가 true인데 요청이 보안 연결로 인식되지 않으면 Set-Cookie를
+    보내지 않음(문서화된 동작). cloudflared는 TLS를 종단하고 루프백으로 평문 HTTP를 넘기므로
+    Express 입장에서는 모든 요청이 insecure였음. PUBLIC_ORIGIN을 켠 순간 secure:true가 되면서
+    쿠키가 조용히 사라진 것.
+  수정 - app.set('trust proxy', 'loopback'). 이 프로세스는 같은 머신의 프록시에서만 연결을 받으므로
+    첫 홉만 신뢰하면 X-Forwarded-Proto: https가 반영되어 req.secure가 정확해짐.
+  이 버그는 단위 테스트로 잡히지 않음 - 터널을 실제로 태워야 나타남.
+
+검증 명령과 실제 결과:
+  - npm run typecheck: 통과
+  - npm test (TEST_DATABASE_URL 설정): 189 passed
+    (첫 실행은 postgres 통합 테스트가 DuplicateHandleError로 실패했는데, 15차 실행이 남긴
+     pgtester1 행 때문이었음. 테스트가 스스로 정리하지 않는 문제 - 아래 남은 문제 1) 참고.
+     전용 테스트 DB만 TRUNCATE 후 재실행하여 통과)
+  - 공개 URL 실측(https://overcome-roughly-enrolled-applications.trycloudflare.com):
+      GET / 200, /api/health {"storage":"postgresql"}
+      Set-Cookie: vibe.sid=...; HttpOnly; Secure; SameSite=Lax 발급 확인, 이후 /api/auth/session 200
+      COOP/COEP: 루트·/practice-sandbox.html·/webr/webr-worker.js 모두 require-corp 유지
+        (11차에서 고생한 워커 COEP 헤더가 프로덕션 빌드에서도 살아있음을 확인)
+      브라우저: crossOriginIsolated true, SharedArrayBuffer function
+      로그인 → 프로필 저장 → 과제 생성(electronics:quality/clean/compare) → 스타터 코드 실행
+        1/4 통과(미완성 코드라 정상) → "학습 기록 저장" 성공까지 확인
+남은 문제 / 다음 작업:
+  1) tests/postgres.integration.test.ts가 생성한 행을 정리하지 않아 연속 실행 시 실패함. 다음 작업 후보.
+  2) Quick Tunnel 주소는 cloudflared 프로세스가 살아있는 동안만 유효하고 재시작하면 바뀜. 바뀔 때마다
+     .env의 PUBLIC_ORIGIN을 갱신하고 서버를 재시작해야 함. 고정 주소가 필요하면 도메인 구입 후
+     named tunnel로 전환.
+  3) 세션 저장소는 여전히 메모리. SESSION_SECRET을 고정해 재시작 시 쿠키 자체는 유지되지만
+     세션 데이터는 사라짐. Postgres가 준비됐으므로 connect-pg-simple 도입이 다음 후보.
+  4) 실제 CSRF 토큰은 여전히 미도입(X-Vibe-Lab 헤더 검사 유지). docs/MULTI_USER_DESIGN.md 5절
+     체크리스트의 나머지 항목(비밀번호 재설정 경로, 사용자 기준 레이트 리밋)도 그대로 남음.
+  5) 공개 주소가 살아있는 동안에는 누구나 회원가입할 수 있음. 데모가 끝나면 cloudflared 프로세스를
+     종료해 노출을 닫을 것.
+사용자 승인 또는 결정이 필요한 사항: 없음.
+```

@@ -50,8 +50,9 @@ export function attachAuth(app: express.Express, users: UserStore) {
     secret: sessionSecret(),
     resave: false,
     saveUninitialized: false,
-    // secure must become true once this is served over HTTPS. See docs/MULTI_USER_DESIGN.md section 5.
-    cookie: { httpOnly: true, sameSite: 'lax', secure: false, maxAge: 7 * 24 * 60 * 60 * 1000 },
+    // secure follows PUBLIC_ORIGIN (see server/app.ts): only true once the app is actually reachable over
+    // HTTPS (e.g. behind Cloudflare Tunnel). See docs/MULTI_USER_DESIGN.md section 5.
+    cookie: { httpOnly: true, sameSite: 'lax', secure: !!process.env.PUBLIC_ORIGIN, maxAge: 7 * 24 * 60 * 60 * 1000 },
   }), auth.initialize(), auth.session());
   const router = express.Router();
   // Brute force guard, deliberately stricter than the general /api limit.
