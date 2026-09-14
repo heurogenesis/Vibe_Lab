@@ -956,3 +956,16 @@ UI 작업 (두 단계):
 - 검증: 실제 브라우저에서 패널과 콘텐츠 영역 중심 차이 0px, 선택 메뉴 box-shadow none / 왼쪽 테두리 0px / 하단 테두리 2px 확인. `npm.cmd run build`, `git diff --check` 통과. 기존 Zod 주석·큰 청크 경고 유지. CSS 소규모 배치 변경으로 전체 테스트는 재실행하지 않았습니다.
 - 변경 파일: `src/styles.css`, `PROGRESS.md`. 로컬 커밋만 작성하고 Push·main 병합은 하지 않습니다. 기존 `.claude/` 미추적 파일은 보존했습니다.
 - 다음: 사용자 화면에서 로그인·회원가입 및 상단 메뉴 표시 확인.
+
+
+### 2026-09-15 · DEPLOY-PREP-01 / Codex — 무료 평가 공개 우선, AWS 전환 안내
+
+- 기준: feature/mvp-savepoint-20260912 / a91cbff. 사용자 배포 준비 요청 후 추가 비용 없는 방향 요청을 반영했습니다.
+- 변경 파일: docs/FREE_DEMO.md, docs/AWS_DEPLOYMENT.md, ROADMAP.md, PROGRESS.md. 제품 코드와 설정은 변경하지 않았습니다.
+- 현재 방향: 로컬 PostgreSQL + 운영 빌드 Express + Cloudflare Quick Tunnel의 무료 임시 HTTPS 공개. PC 가동 필요·주소 변경·SSE 미지원 등 제한 명시. AWS 구성은 향후 전환 참고로 보류.
+- 코드 확인: 인증/CSRF/DB 세션/사용자별 고비용 요청 제한과 PostgreSQL CI 정의 존재. 과거 기록의 CSRF·사용자별 제한 미도입 항목은 현재 코드와 다릅니다.
+- RDS 전환 시: migrate.ts가 앱의 CA 환경변수를 사용하지 않고, 컴파일된 migrate의 SQL 경로도 빌드 산출물과 맞지 않음. 인증서 검증 psql 초기화 절차와 후속 보완점 문서화.
+- AI: 출력 제한은 있으나 누적 예산 차단·일일 한도·소진 시 자동 규칙 모드 전환은 미구현. 제공된 키의 모델·잔액·과금 조건은 미확인. 키 연결만으로 검수형 실습이 생성형 자료로 바뀌지는 않음을 명시.
+- 검증: 해당 서버·인증·AI·마이그레이션·빌드·CI 코드를 읽고 공식 Cloudflare/AWS/OpenAI/node-postgres 문서와 대조. 문서 작업이므로 빌드/테스트 재실행 없음. 직전 UI 커밋 빌드 통과와 과거 테스트 기록을 신규 검증으로 취급하지 않았습니다. 실제 AWS/공개 터널/API 연결 검증은 이번에 수행하지 않았습니다.
+- Git/공유: 위 문서 4개만 로컬 커밋으로 기록하며 Push·main 병합은 하지 않습니다. 기존 미추적 .claude/ 보존.
+- 다음 시작점: ROADMAP FREE-01~04. 실제 API 키를 채팅으로 받지 않고 사용 조건을 먼저 확인. 추가 비용을 발생시키는 리소스 생성 없음.
