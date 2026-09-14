@@ -981,5 +981,5 @@ UI 작업 (두 단계):
 - 미래 API: 검증된 매개변수와 허용 계산기로 정답 재계산하는 서버 함수 제공. 공개 편집 API·LLM 자동 출제 호출은 이번 범위에 없음. DB 예제 저장본과 브라우저 실행 카탈로그 경계는 docs/CONTENT_BANK.md에 명시.
 - 실제 검증: 초기 4개 정규화 참조 테스트의 음수 하한 문자열 보간 오류를 수정. 앱 계정 CREATE DATABASE 권한이 없어 새 테스트 DB 생성은 실패했고, 이미 있는 별도 vibelab_test로 전환. 최종 전체 249 passed / 0 skipped. npm run build 통과(기존 Zod 주석·큰 청크 경고 유지). 실제 Chrome 신규 화면 검수는 미수행.
 - 변경: shared/catalog.ts, shared/extended-exercises.ts; server/question-bank.ts, learning-content-store.ts, seed-learning-content.ts, practice-curriculum.ts, curriculum.ts, ai.ts, app.ts; tests/question-bank.test.ts, content-postgres.test.ts, practice.test.ts, learning.test.ts; README.md, docs/CONTENT_BANK.md, PROGRESS.md.
-- Git/공유: 위 변경을 작업 브랜치에 로컬 커밋. 원격 Push·main 병합 없음. 실제 DB 내용은 Git에 올라가지 않으며 seed 스크립트로 재현.
+- Git/공유: 사용자 후속 요청에 따라 구현 커밋 05f9ac8을 origin/feature/mvp-savepoint-20260912에 Push했고 원격 SHA 일치를 확인했습니다. 이전 UI·무료 배포 문서 커밋도 함께 공유됐습니다. main 병합은 하지 않았습니다. 실제 DB 내용은 Git에 올라가지 않으며 seed 스크립트로 재현합니다. 이 공유 상태 기록도 같은 브랜치에 후속 문서 커밋으로 반영합니다.
 - 다음: 화면 새로고침 후 새 맞춤 과제 또는 자료실 신규 테마에서 확인. 다른 환경에서는 기존 DB 마이그레이션 뒤 seed-learning-content.ts 실행 필요. 무료 평가 공개와 API 사용량 제한 작업은 미완료 상태 유지.
