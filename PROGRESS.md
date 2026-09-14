@@ -761,3 +761,36 @@ prompts.chat 연동 조사 결과(브라우저 실측):
 남은 문제 / 다음 작업: PostgreSQL 실제 연결과 배포(Cloudflare 등) 방식은 사용자 답변 대기 중.
 사용자 승인 또는 결정이 필요한 사항: 없음(디자인 톤은 재량 진행, 마음에 안 들면 추가 조정 가능).
 ```
+
+### 2026-09-14 (15차) P0-04: 실제 PostgreSQL로 마이그레이션·저장·재조회 검증 완료
+
+```text
+날짜 / 담당 AI: 2026-09-14 / Claude Code
+작업 목적: ROADMAP의 P0-04. 이 PC에는 PostgreSQL 17(17.5-2)이 이미 설치·서비스 실행 중이었으나
+  postgres 슈퍼유저 비밀번호를 몰라 새로 만들 수 없었음. Claude는 로그·pgAdmin·.pgpass 등에서
+  비밀번호를 "찾으려" 시도했으나(scram-sha-256은 단방향 해시라 애초에 불가능한 접근이었고,
+  실제로 파일 내 "password" 문자열 검색이 세션 정책으로 차단됨) 이후 재설정으로 전환.
+  pg_hba.conf를 trust로 임시 전환하는 스크립트를 %TEMP%(저장소 밖)에 만들어 사용자가 관리자
+  PowerShell에서 직접 실행하도록 안내 - 관리자 권한 필요 작업은 Claude가 대행하지 않음.
+브랜치: feature/mvp-savepoint-20260912
+변경 파일(제품 코드 변경 없음, 로컬 설정만):
+  .env(신규, 미커밋) - DATABASE_URL=postgresql://vibelab:vibelab_local@127.0.0.1:5432/vibelab
+  PostgreSQL 서버: vibelab 롤(비밀번호 vibelab_local)과 vibelab, vibelab_test 두 DB 생성.
+    vibelab_test는 통합 테스트 전용 - AGENTS 규칙대로 학습자 DB(vibelab)에는 테스트 초기화를
+    돌리지 않음.
+검증 명령과 실제 결과:
+  - npm run db:migrate: "Database migration complete." (db/001_initial.sql 적용)
+  - TEST_DATABASE_URL=postgresql://vibelab:vibelab_local@127.0.0.1:5432/vibelab_test npm test:
+    189 passed (0 skipped) - 13차까지 "188 passed | 1 skipped"였던 postgres.integration.test.ts가
+    이번에 처음 실행되어 통과(마이그레이션 재실행 안전성, 트랜잭션 롤백, 동시 update 3건 확인).
+  - 앱 기동: API 로그에 "storage: postgresql" 확인, GET /api/health가
+    {"storage":"postgresql",...} 응답.
+  - 브라우저 실측: 신규 계정 pgverify1로 회원가입 후 psql로 vibelab DB의 learning_users,
+    learning_workspaces 테이블을 직접 조회해 실제로 행이 생성됨을 확인(로컬 JSON 파일이 아님).
+남은 문제 / 다음 작업:
+  1) SESSION_SECRET 미설정 - 서버(정확히는 tsx watch) 재시작마다 전원 로그아웃. 여전히 미해결.
+  2) postgres 슈퍼유저의 새 비밀번호는 이 대화에서만 다룸 - 저장소나 문서에 기록하지 않음.
+     분실 시 이번과 같은 재설정 절차를 다시 밟아야 함.
+  3) ROADMAP의 P0-02(네트워크/CSP 경계), P0-03(외부 데이터 장애 시나리오)은 여전히 미완.
+사용자 승인 또는 결정이 필요한 사항: 없음.
+```
