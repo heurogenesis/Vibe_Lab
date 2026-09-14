@@ -30,7 +30,7 @@ export function generatePracticeCurriculum(profile: Profile, previous: Assignmen
       guidance,
     ].filter(Boolean).join(' ').replace(/\s{2,}/g, ' '),
     difficulty, minutes: profile.minutes * lessons.length,
-    concepts: ['TypeScript 함수', '데이터 계약', '누락값과 경계 조건', '자동 테스트', '그룹별 집계', '비동기 처리'],
+    concepts: [`${language.label} 함수`, '데이터 계약', '누락값과 경계 조건', '자동 테스트', '그룹별 집계', '비동기 처리'],
     lessons: lessons.map((exercise, index) => ({
       title: exercise.title,
       description: `${exercise.objective} ${role.subject}에서 이 계산이 틀리면 ${role.decision} 판단이 함께 흔들립니다.`,
