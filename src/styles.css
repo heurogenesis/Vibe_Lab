@@ -36,259 +36,402 @@
 .prompt-output > div:first-child strong { font-size: 13px; }
 .prompt-output pre { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 15px; margin: 10px 0; max-height: 380px; overflow: auto; font: 12px/1.75 Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* Design refresh: depth on cards, friendlier motion, AI areas visually called out */
-:root { --shadow-sm: 0 1px 2px rgba(32,54,47,.05); --shadow-md: 0 6px 20px rgba(32,54,47,.08); --ai: #6a4fd6; --ai-soft: #f2eefb; }
-.panel, .learning-card, .assignment-card, .repo-card, .welcome-card { box-shadow: var(--shadow-sm); transition: box-shadow .18s ease, transform .18s ease, border-color .18s ease; }
-.learning-card:hover, .assignment-card:hover, .repo-card:hover { box-shadow: var(--shadow-md); transform: translateY(-3px); border-color: #c3d6bd; }
-.primary, .secondary { transition: box-shadow .15s ease, transform .1s ease, background .15s ease; }
-.primary { box-shadow: 0 1px 2px rgba(37,78,64,.28); }
-.primary:hover:not(:disabled) { box-shadow: 0 6px 16px rgba(37,78,64,.25); transform: translateY(-1px); }
-.primary:active:not(:disabled) { transform: translateY(0); box-shadow: 0 1px 2px rgba(37,78,64,.28); }
-.secondary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
-.nav-item { transition: background .15s ease, color .15s ease; }
-.step-list button, .choice { transition: background .15s ease, border-color .15s ease; }
+/* Learning-focused theme. Keep execution, feedback and help visually distinct. */
+:root {
+  font-family: 'Noto Sans KR', 'Malgun Gothic', system-ui, sans-serif;
+  --ink: #233249;
+  --muted: #59697c;
+  --surface: #f5f7fa;
+  --line: #dce3ec;
+  --green: #315acb; /* Existing component token: primary action, not result status. */
+  --lime: #dce9ff;
+  --ai: #6650a5;
+  --ai-2: #7862b5;
+  --ai-soft: #f5f2fb;
+  --ai-line: #dfd7ed;
+  --ai-grad: linear-gradient(135deg, #6650a5, #7862b5);
+  --pass: #18734f;
+  --shadow-sm: 0 2px 4px rgb(30 48 74 / 3%);
+  --shadow-md: 0 8px 24px rgb(30 48 74 / 7%);
+  color: var(--ink);
+  background: var(--surface);
+  line-height: 1.6;
+  color-scheme: light;
+}
 
-/* AI tutor + prompt-kit read as one distinct "AI 학습" surface across the app */
-.tutor { background: linear-gradient(180deg, #fbfaff, #f4f1fc); border-color: #e2dbf5; box-shadow: var(--shadow-sm); }
-.tutor-icon { background: linear-gradient(135deg, var(--ai), #8f7ae8); color: #fff; }
-.tutor-header h3 { color: var(--ai); }
-.chat-message.user { background: var(--ai); }
-.chat-message.user small { color: #ded7f7; }
-.quick-questions button:hover { border-color: var(--ai); color: var(--ai); }
-.ai-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 700; letter-spacing: .6px; color: var(--ai); background: var(--ai-soft); border-radius: 20px; padding: 4px 9px; margin-left: 8px; vertical-align: middle; }
-.prompt-kit { border-left: 3px solid var(--ai); background: linear-gradient(135deg, #f8f6fd, #f1eefb); }
-.prompt-kit > strong { color: var(--ai); }
-.prompt-kit .secondary:hover:not(:disabled) { border-color: var(--ai); color: var(--ai); }
+body { background: var(--surface); }
+::selection { background: #dce7ff; color: #172c58; }
+button, a, input, select, textarea { transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease; }
+button:disabled { cursor: not-allowed; opacity: .58; }
+button:focus-visible, a:focus-visible, summary:focus-visible,
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid #315acb;
+  outline-offset: 3px;
+}
+button, input, select, textarea { touch-action: manipulation; }
+button { line-height: 1.5; }
+h1, h2, h3 { text-wrap: pretty; overflow-wrap: anywhere; }
+p { line-height: 1.85; }
 
-/* Scrollable panels feel tidier with a thin, on-brand scrollbar (WebKit/Blink) */
-.chat-messages::-webkit-scrollbar, .console-panel pre::-webkit-scrollbar, .readme::-webkit-scrollbar, .file-list::-webkit-scrollbar { width: 7px; height: 7px; }
-.chat-messages::-webkit-scrollbar-thumb, .console-panel pre::-webkit-scrollbar-thumb, .readme::-webkit-scrollbar-thumb, .file-list::-webkit-scrollbar-thumb { background: #c7d6c1; border-radius: 10px; }
+/* Navigation stays quiet so the lesson is the visual centre. */
+.sidebar {
+  width: 236px;
+  padding: 30px 18px 22px;
+  background: #fff;
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.brand { color: #233249; font-size: 25px; gap: 2px; padding: 0 8px; }
+.brand-icon { background: #315acb; color: #fff; width: 36px; height: 36px; border-radius: 11px; }
+.beta { color: #626f83; border-color: #dce3ec; border-radius: 4px; font-size: 9px; }
+.workspace-label { color: #66758a; font-size: 10px; letter-spacing: 1.5px; margin: 42px 14px 16px; }
+.nav-item { min-height: 48px; padding: 13px 14px; gap: 11px; border-radius: 9px; color: #526278; margin-bottom: 5px; }
+.nav-item:hover { background: #f3f6fb; color: #243b63; }
+.nav-item.active { background: #eaf0ff; color: #294eaf; box-shadow: inset 3px 0 #315acb; font-weight: 700; }
+.sidebar-note { padding: 25px 12px; color: #647388; border-color: var(--line); }
+.sidebar-note > svg { color: #8291a7; }
+.sidebar-note p { font-size: 13px; }
+.sidebar-note strong { color: #32435b; font-weight: 600; }
+.sidebar-note > span, .mode-label { color: #617086; font-size: 11px; }
+.account { gap: 10px; border-color: var(--line); padding: 20px 6px 0; }
+.avatar { width: 36px; height: 36px; flex-shrink: 0; background: #eaf0ff; color: #315acb; }
+.account > div { min-width: 0; flex: 1; }
+.account strong, .account small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account strong { color: var(--ink); }
+.account small { color: var(--muted); }
+.sidebar .text-button { font-size: 11px; white-space: nowrap; color: #526278; }
+.main { width: calc(100% - 236px); margin-left: 236px; min-width: 0; }
+.topbar { height: 68px; padding: 0 40px; background: #fff; color: #59697c; border-color: var(--line); gap: 16px; }
+.slash { color: #99a6b8; margin: 0 12px; }
+.top-chip { color: #5c6e87; letter-spacing: 1px; flex-shrink: 0; }
+.page { max-width: 1516px; padding: 36px 40px 20px; }
+.eyebrow { color: #52678b; font-size: 11px; letter-spacing: 1.8px; margin-bottom: 10px; }
+h1 { font-size: clamp(30px, 3vw, 42px); line-height: 1.4; letter-spacing: -1.5px; }
+.small-heading { font-size: clamp(26px, 2.5vw, 34px); line-height: 1.5; }
+.accent { color: #315acb; }
+.page-heading { margin-bottom: 26px; gap: 20px; }
+.lead { font-size: 15px; margin: 14px 0 26px; max-width: 75ch; }
+.page-heading .lead { margin-bottom: 0; }
+.chapter-index { font-size: 58px; color: #b3bfd0; letter-spacing: -3px; }
+.chapter-index > span { font-size: 11px; color: #68778c; margin-top: 12px; }
+footer { color: #617086; border-color: var(--line); margin-top: 40px; font-size: 11px; flex-wrap: wrap; }
+.copyright { margin-left: auto; color: #617086; }
 
-/* Test result cards read faster at a glance: clearer pass/fail chip look */
-.test-results details { border-radius: 10px; }
-.test-results details > summary { font-weight: 600; }
-.test-results .test-fail { border-left-color: #c17a3a; }
+/* Clear next action, with compact progress and readable project cards. */
+.welcome-card {
+  background: linear-gradient(110deg, #edf3ff, #f4f7fc);
+  color: var(--ink);
+  border: 1px solid #d5e0f5;
+  border-radius: 16px;
+  padding: 30px 32px;
+  gap: 30px;
+  box-shadow: var(--shadow-sm);
+}
+.welcome-card > div:first-child { min-width: 0; }
+.welcome-card h2 { color: #213b67; font-size: 23px; line-height: 1.6; margin: 18px 0 10px; }
+.welcome-card p { color: #526580; font-size: 14px; max-width: 65ch; }
+.pill { color: #3157a3; border-color: #ccd9f2; background: #ffffffa6; font-size: 10px; font-weight: 600; }
+.welcome-card .primary { background: #315acb; color: #fff; margin-top: 12px; }
+.welcome-card .primary:hover:not(:disabled) { background: #254bb3; }
+.flow-visual { width: 220px; }
+.flow-visual > div { background: #ffffffa6; border-color: #d6e1f1; width: 210px; padding: 11px 15px; }
+.flow-visual svg { color: #607ba5; }
+.flow-visual span { color: #41597c; }
+.flow-visual small { color: #61738d; font-size: 11px; }
+.flow-visual .highlight { background: #fff; border-color: #91abe0; transform: none; box-shadow: var(--shadow-sm); }
+.highlight svg, .highlight span { color: #315acb; }
+.flow-line { height: 13px; border-left-color: #a9bad3; }
+.section-title { margin: 28px 0 16px; gap: 16px; }
+.section-title h2 { font-size: 19px; font-weight: 700; }
+.section-title > span { color: #64748b; font-size: 11px; }
+.panel, .learning-card, .assignment-card, .repo-card { border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: var(--shadow-sm); }
+.panel { padding: 28px; }
+.learning-grid { gap: 18px; }
+.learning-card, .assignment-card { padding: 24px; }
+.assignment-card { display: flex; flex-direction: column; min-width: 0; }
+.assignment-card:hover, .repo-card:hover { border-color: #aabedf; background: #fcfdff; box-shadow: var(--shadow-md); }
+.learning-card h3 { color: #2b405d; font-size: 17px; margin-top: 20px; }
+.learning-card p, .repo-card p { font-size: 14px; }
+.assignment-card h3 { font-size: 19px; margin: 16px 0 10px; line-height: 1.6; }
+.assignment-card p { margin: 0 0 12px; }
+.assignment-card .card-bottom { margin-top: auto; width: 100%; }
+.card-top { color: #506b98; gap: 12px; flex-wrap: wrap; }
+.card-top > span, .card-bottom { color: #5f7087; }
+.card-bottom { border-top-color: #e8edf4; line-height: 1.6; }
+.tag { background: #edf2fb; color: #3d5d94; border-radius: 6px; padding: 5px 9px; line-height: 1.5; }
+.metadata { gap: 8px 16px; line-height: 1.7; }
+.stats { gap: 14px; margin: 24px 0 30px; }
+.stats > div { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; }
+.stats strong { color: #29466e; font-size: 28px; margin-top: 5px; font-variant-numeric: tabular-nums; }
+progress { height: 7px; background: #e8edf5; accent-color: #315acb; }
+progress::-webkit-progress-bar { background: #e8edf5; }
+progress::-webkit-progress-value { background: #315acb; }
+progress::-moz-progress-bar { background: #315acb; border-radius: 5px; }
 
-.copyright { margin-left: auto; color: #9aa79d; }
-@media (max-width: 800px) { .copyright { width: 100%; margin-left: 0; } }
+/* Controls: consistent target sizes and visible keyboard focus. */
+.primary, .secondary { min-height: 44px; border-radius: 9px; padding: 11px 17px; gap: 9px; font-size: 14px; }
+.primary { background: #315acb; color: #fff; box-shadow: 0 2px 3px rgb(49 90 203 / 12%); }
+.primary:hover:not(:disabled) { background: #254bb3; }
+.secondary { background: #fff; color: #3f526e; border-color: #cbd6e5; }
+.secondary:hover:not(:disabled) { background: #f1f5fc; border-color: #98afd5; }
+.text-button { color: #3157b5; min-height: 36px; gap: 7px; }
+input:not([type=radio]):not([type=checkbox]), textarea, select {
+  background: #fff;
+  color: var(--ink);
+  border-color: #cbd6e3;
+  border-radius: 9px;
+  min-height: 46px;
+  padding: 11px 13px;
+  font-size: 15px;
+}
+input::placeholder, textarea::placeholder { color: #68788e; opacity: 1; }
+input[type=radio], input[type=checkbox] { accent-color: #315acb; width: 18px; height: 18px; }
+label { line-height: 1.65; color: #354861; }
+legend { color: #354861; }
+.form-actions { gap: 12px; flex-wrap: wrap; }
+.choice { min-height: 48px; border-radius: 9px; padding: 13px 16px; }
+.choice:hover { border-color: #a9bbd8; }
+.choice.selected { background: #edf3ff; border-color: #9db3e0; }
+.check-chip { min-height: 42px; padding: 8px 11px; font-size: 13px; }
+.check-chip:has(input:checked) { background: #edf3ff; border-color: #9db3e0; }
+.profile-layout { grid-template-columns: 210px minmax(0, 1fr); gap: 28px; }
+.profile-steps > button { min-height: 48px; }
+.profile-steps > button.selected { background: #eaf0ff; color: #3157b5; }
+.profile-steps > button > span { background: #e5ebf4; }
+.profile-steps > button.selected > span { background: #315acb; }
+.profile-form { max-width: 860px; }
+.notice { background: #edf3ff; color: #3d567f; border-color: #d3dff5; line-height: 1.8; }
+.small-note { font-size: 13px !important; color: #5c6c80; }
+.inline-error { color: #a13932; }
+.error-banner { background: #fff2f0; color: #942d27; border-color: #ebc3bf; }
+.toast { background: #233854; box-shadow: var(--shadow-md); }
+.availability { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+.availability.ok { color: #18734f; }
+.availability.taken { color: #a13932; }
+.empty-state { background: #fff; border-color: #c5d2e4; color: var(--muted); }
+.empty-state h2, .empty-state > svg { color: #365781; }
 
-/* ---------------------------------------------------------------------------
-   AI learning surface
-   The green brand stays the product; --ai marks the places where a model (or a
-   model-shaped affordance) is involved, so a learner can always tell which part
-   of the screen is generated help and which part is the graded practice itself.
-   --------------------------------------------------------------------------- */
-:root { --ai-2: #8f7ae8; --ai-line: #e2dbf5; --ai-grad: linear-gradient(135deg, var(--ai), var(--ai-2)); }
+/* Authentication uses a comfortable reading/form width without markup changes. */
+.page > .panel:has(> .tabs[aria-label="로그인 또는 회원가입"]) {
+  max-width: 560px;
+  margin-top: 24px;
+  padding: 28px 32px;
+}
+.panel:has(> .tabs[aria-label="로그인 또는 회원가입"]) .tabs { display: flex; margin: 0 0 24px; }
+.panel:has(> .tabs[aria-label="로그인 또는 회원가입"]) .tabs button { flex: 1; }
+.panel:has(> .tabs[aria-label="로그인 또는 회원가입"]) form > .primary { width: 100%; margin-top: 8px; }
 
-/* Hero: a soft aurora behind the dark card, so the entry point reads as a
-   generated, personal path rather than a static banner. */
-.welcome-card { position: relative; isolation: isolate; overflow: hidden; }
-.welcome-card::before { content: ''; position: absolute; inset: -40% -10% auto auto; width: 420px; height: 420px; border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, rgba(216,240,120,.22), transparent 62%), radial-gradient(circle at 70% 60%, rgba(143,122,232,.26), transparent 60%);
-  filter: blur(18px); z-index: -1; pointer-events: none; }
-.welcome-card::after { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: .35;
-  background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
-  background-size: 26px 26px; mask-image: radial-gradient(circle at 80% 20%, #000, transparent 70%); }
-.pill { background: rgba(255,255,255,.06); backdrop-filter: blur(2px); }
+/* Lesson hierarchy: current step, objective, editor, evidence, then help. */
+.workspace-heading { gap: 22px; }
+.workspace-heading h1 { font-size: clamp(24px, 2.2vw, 31px); line-height: 1.6; }
+.workspace-layout { grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; }
+.recommendation { color: #5b6d84; line-height: 1.85; }
+.recommendation summary, .recommendation > strong { color: #3a5c91; }
+.concept-list { gap: 7px; margin: 18px 0; }
+.concept-list span { background: #fff; border-color: #dce3ed; color: #53657d; font-size: 12px; }
+.tabs { display: inline-flex; max-width: 100%; background: #eaf0f7; border: 1px solid #dfe6ef; border-radius: 11px; gap: 5px; padding: 5px; margin: 24px 0; }
+.tabs button { min-height: 42px; padding: 10px 17px; border: 0; border-radius: 7px; color: #546780; }
+.tabs button.active { background: #fff; color: #294eaf; box-shadow: 0 1px 4px rgb(30 48 74 / 9%); }
+.step-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 22px; }
+.step-list button { min-height: 60px; gap: 11px; padding: 12px 14px; border-radius: 10px; line-height: 1.65; font-size: 13px; }
+.step-list button > span:first-child { width: 28px; height: 28px; background: #eef2f8; color: #52677f; font-size: 12px; }
+.step-list button.active { background: #edf3ff; border-color: #9eb6e6; color: #294eaf; box-shadow: inset 3px 0 #315acb; }
+.step-list button.active > span:first-child { background: #315acb; color: #fff; }
+.step-list .done { background: #18734f !important; color: #fff !important; }
+.lesson-panel { padding: 28px; }
+.lesson-panel h2 { font-size: 24px; line-height: 1.6; }
+.lesson-panel p { font-size: 15px; line-height: 1.9; }
+.lesson-panel h3 { font-size: 17px; }
+.objective { background: #f3f7fd; border: 1px solid #dce5f3; border-left: 3px solid #7c9ed9; border-radius: 9px; padding: 17px 20px; }
+.objective strong { color: #385b91; font-size: 14px; }
+.objective p { margin-top: 7px; }
+.prompt-box { background: #f7f8fb; border-color: #dfe5ed; padding: 20px; border-radius: 10px; }
+.prompt-box p { font-size: 14px; }
+.theory-box { line-height: 1.9; }
+.theory-box > a, .code-lab ~ a { color: #3157b5; text-decoration: underline; text-underline-offset: 3px; }
+.experiment-box { border-left-color: #c19742; background: #fffcf5; padding: 14px 18px; border-radius: 0 9px 9px 0; }
+.check-list li { font-size: 14px; line-height: 1.8; }
+.check-list svg { color: #18734f; }
 
-/* Step markers carry the sequence: the current one fills in, the rest stay quiet.
-   A connector line was tried here and removed - threaded behind solid cards it only
-   showed in the gaps and read as an artifact rather than a path. */
-.step-list { gap: 10px; }
-.step-list button > span:first-child { transition: background .18s ease, color .18s ease, box-shadow .18s ease; }
-.step-list button.active > span:first-child { background: var(--green); color: #fff; box-shadow: 0 0 0 4px #e3ecdf; }
+/* High-specificity editor selector prevents generic textarea colours winning. */
+.code-lab { margin: 28px 0; }
+.code-lab .section-title { margin-top: 0; gap: 10px; }
+.code-lab .section-title h3 { margin: 0; }
+.code-lab .section-title > .tag { display: inline-flex; letter-spacing: 0; color: #3d5d94; font-size: 12px; }
+.code-label { margin-bottom: 12px; font-size: 14px; font-weight: 600; }
+.code-lab textarea.code-editor {
+  background: #172236;
+  color: #e4ecf8;
+  border: 1px solid #344761;
+  border-radius: 12px;
+  min-height: 360px;
+  padding: 22px;
+  font: 14px/1.85 'Cascadia Code', Consolas, 'Courier New', monospace;
+  font-weight: 400;
+  tab-size: 2;
+  white-space: pre;
+  overflow: auto;
+  box-shadow: inset 0 1px 4px rgb(0 0 0 / 12%);
+  color-scheme: dark;
+  scrollbar-color: #607189 #172236;
+}
+.code-lab textarea.code-editor:focus { outline: 3px solid #7da2ed; outline-offset: 3px; }
+.code-lab textarea.code-editor::selection { background: #36578a; color: #fff; }
+.lab-actions { gap: 10px; align-items: center; margin: 14px 0; }
+.code-lab > .lab-actions:has(> .primary) { padding: 12px; border: 1px solid #dce5f2; background: #f4f7fc; border-radius: 11px; }
+.lab-actions .text-button { padding: 6px; font-size: 13px; }
+.console-panel { background: #1c2a40; color: #e1eaf7; border: 1px solid #344761; padding: 20px; border-radius: 12px; margin-top: 20px; }
+.console-panel > strong { display: block; color: #c6d7f0; font-size: 13px; padding-bottom: 12px; border-bottom: 1px solid #3a4b63; }
+.console-panel p { font-size: 14px; color: #d3deee; line-height: 1.8; }
+.console-panel pre, .data-preview pre { font: 13px/1.85 'Cascadia Code', Consolas, monospace; scrollbar-width: thin; }
+.console-panel pre { color: #e4ecf8; }
+.data-preview { background: #f5f7fb; border: 1px solid #dce4f0; border-radius: 10px; padding: 14px 17px; }
+.data-preview summary { font-size: 13px; color: #435c80; line-height: 1.7; }
+.data-preview[open] summary { margin-bottom: 12px; }
+.test-results { margin-top: 18px; }
+.test-results details { border: 1px solid #ebd7b4; border-left: 4px solid #b98022; background: #fffbf2; border-radius: 9px; padding: 14px 16px; margin: 10px 0; color: #714f1d; }
+.test-results .test-pass { border-color: #c7e4d5; border-left-color: #18734f; background: #f1faf5; color: #205b40; }
+.test-results summary { font-size: 14px; line-height: 1.7; font-weight: 600; }
+.test-results p { font-size: 13px; line-height: 1.8; }
+.test-results code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.lab-hints { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 22px; }
+.lab-hints p { background: #f5f7fb; border-left: 3px solid #b5c5df; padding: 12px 16px; font-size: 14px; border-radius: 0 8px 8px 0; }
 
-/* Tutor: a named companion with a visible state, not an anonymous sidebar. */
-.tutor { padding: 0 0 18px; overflow: hidden; }
-.tutor > *:not(.tutor-header) { margin-left: 20px; margin-right: 20px; }
-.tutor-header { position: relative; padding: 18px 20px; margin: 0; background: var(--ai-grad); color: #fff; }
-.tutor-header h3, .tutor-header small { color: #fff; }
-.tutor-header small { opacity: .82; }
-.tutor-icon { background: rgba(255,255,255,.18); color: #fff; backdrop-filter: blur(2px); }
-.tutor-state { margin-left: auto; font-size: 10px; font-weight: 700; letter-spacing: .8px; padding: 4px 9px; border-radius: 20px; background: rgba(255,255,255,.18); color: #fff; display: flex; align-items: center; gap: 6px; }
-.tutor-state.live::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #c8f07a; box-shadow: 0 0 0 0 rgba(200,240,122,.7); animation: pulse 2s infinite; }
-@keyframes pulse { 70% { box-shadow: 0 0 0 7px rgba(200,240,122,0); } 100% { box-shadow: 0 0 0 0 rgba(200,240,122,0); } }
-.tutor-context { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin: 16px 20px 0; }
-.tutor-context > span { font-size: 10px; font-weight: 700; letter-spacing: .6px; color: var(--ai); background: var(--ai-soft); border-radius: 5px; padding: 3px 7px; }
-.tutor .chat-form { margin-bottom: 18px; }
-.chat-message.assistant { background: #fff; border: 1px solid var(--ai-line); border-left: 3px solid var(--ai); }
-.chat-messages > .chat-message:first-child:last-of-type { background: #fbfaff; }
-.quick-questions button { transition: border-color .15s ease, color .15s ease, background .15s ease; }
-.quick-questions button:hover { background: var(--ai-soft); }
-
-/* "Thinking" reads as work in progress rather than a stalled screen. */
-.thinking { display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--ai); margin: 4px 0; }
+/* Assistance is available but visually secondary to the learner's own work. */
+.tutor { position: sticky; top: 20px; padding: 0 0 18px; background: #fcfbfe; border-color: #dfddea; overflow: hidden; }
+.tutor > *:not(.tutor-header) { margin-left: 18px; margin-right: 18px; }
+.tutor-header { display: flex; gap: 10px; padding: 19px 18px; background: #f0edf7; border-bottom: 1px solid #dfd7ed; margin: 0; }
+.tutor-header h3 { color: #514276; font-size: 15px; }
+.tutor-header small { color: #695b82; font-size: 11px; }
+.tutor-icon { background: #e4dcf1; color: #6650a5; width: 36px; height: 36px; border-radius: 10px; }
+.tutor-state { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; color: #65527f; background: #fff; border: 1px solid #d9d1e8; font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 5px; }
+.tutor-state.live::before { content: ''; width: 6px; height: 6px; background: #18734f; border-radius: 50%; }
+.tutor-context { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; line-height: 1.7; margin-top: 16px; }
+.tutor-context > span { flex-shrink: 0; color: #6650a5; background: #ede7f6; border-radius: 4px; font-size: 10px; font-weight: 700; padding: 3px 6px; }
+.chat-messages { max-height: min(440px, 48vh); gap: 12px; padding: 12px 0; scrollbar-gutter: stable; }
+.chat-message { font-size: 14px; line-height: 1.9; padding: 14px; background: #f4f2f8; }
+.chat-message.assistant { background: #fff; border: 1px solid #e2ddec; }
+.chat-message small { color: #6f5d8a; font-size: 11px; }
+.chat-message.user { background: #ede8f7; color: #443562; margin-left: 16px; }
+.chat-message.user small { color: #695784; }
+.quick-questions { gap: 7px; }
+.quick-questions button { min-height: 34px; padding: 7px 9px; color: #64557d; border-color: #ded7e9; font-size: 12px; }
+.quick-questions button:hover { background: #f0ebf8; border-color: #b8a8d0; }
+.tutor .chat-form { margin-bottom: 12px; }
+.chat-form textarea { font-size: 14px; padding-right: 55px; }
+.chat-form .primary { background: #6650a5; min-height: 36px; padding: 9px; }
+.chat-form .primary:hover:not(:disabled) { background: #55418e; }
+.thinking { display: flex; align-items: center; gap: 9px; color: #6650a5; font-size: 13px; }
 .thinking-dots { display: inline-flex; gap: 4px; }
-.thinking-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--ai); opacity: .35; animation: blink 1.2s infinite; }
-.thinking-dots i:nth-child(2) { animation-delay: .2s; }
-.thinking-dots i:nth-child(3) { animation-delay: .4s; }
-@keyframes blink { 0%, 80%, 100% { opacity: .3; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
+.thinking-dots i { width: 5px; height: 5px; border-radius: 50%; background: #7862b5; }
+.thinking-dots i:nth-child(2) { opacity: .7; }
+.thinking-dots i:nth-child(3) { opacity: .4; }
+.ai-badge { display: inline-flex; align-items: center; gap: 5px; background: #ebe5f5; color: #6650a5; border-radius: 5px; padding: 3px 7px; font-size: 10px; font-weight: 700; margin-left: 6px; }
+.prompt-kit { border: 1px solid #dfd7ed; border-radius: 12px; background: #f8f6fc; padding: 20px; margin-top: 26px; }
+.prompt-kit > strong { color: #594582; font-size: 15px; flex-wrap: wrap; }
+.prompt-kit .secondary { background: #fff; color: #5f4c83; border-color: #d8cee8; font-size: 13px; }
+.prompt-kit .secondary:hover:not(:disabled) { background: #f0ebf8; border-color: #b8a8d0; }
+.prompt-output { border-top-color: #dfd7ed; }
+.prompt-output pre { font-size: 13px; line-height: 1.85; border-color: #dfd7ed; }
 
-/* Prompt kit: the other place a model gets involved, marked the same way. */
-.prompt-kit { border-left-width: 0; border-top: 3px solid transparent; border-image: var(--ai-grad) 1; }
-.prompt-kit > strong { align-items: center; }
+/* Discovery, assessment and repository references. */
+.library-filters { grid-template-columns: 1fr 1fr 1.3fr; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; gap: 18px; }
+.library-filters label { margin: 0; font-size: 13px; }
+.library-search { position: relative; }
+.library-search > svg { position: absolute; left: 12px; top: 24px; color: #64748b; pointer-events: none; }
+.library-search input { padding-left: 37px !important; }
+.quiz-result { background: #edf8f2; color: #205b40; border: 1px solid #c7e4d5; }
+.quiz-feedback { background: #fffbf2; color: #714f1d; border: 1px solid #ebd7b4; }
+.quiz-feedback.correct { background: #f1faf5; color: #205b40; border-color: #c7e4d5; }
+.quiz-question .choice { line-height: 1.8; }
+.search-form { border-color: #cbd6e3; padding: 10px 12px 10px 18px; }
+.search-form input:not([type]) { background: transparent; min-width: 0; }
+.repo-card h3 a, .repo-name { color: #3157b5; }
+.repo-card h3 a:hover, .repo-name:hover { text-decoration: underline; text-underline-offset: 3px; }
+.readme { background: #f5f7fb; border: 1px solid #e2e8f1; font-size: 14px; line-height: 1.9; }
+.file-list svg { color: #5f7dad; }
+.file-list li { border-color: #e8edf4; }
+.chat-messages, .console-panel pre, .readme, .file-list, .prompt-output pre { scrollbar-width: thin; scrollbar-color: #a9b6c9 transparent; }
 
-/* Practice surfaces: the graded half of the product stays in the green brand. */
-.code-editor { box-shadow: inset 0 1px 3px rgba(0,0,0,.35); }
-.console-panel { border-left: 3px solid #3c6b4f; }
-.console-panel > strong { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; letter-spacing: .5px; color: #a8c9a8; }
-.concept-list span { transition: border-color .15s ease, color .15s ease; }
-.concept-list span:hover { border-color: #b9cdb0; color: var(--green); }
-
+/* Let the editor keep enough width; move help below it on smaller laptops. */
+@media (max-width: 1320px) {
+  .workspace-layout { grid-template-columns: minmax(0, 1fr); }
+  .tutor { position: static; }
+  .chat-messages { max-height: 360px; }
+}
+@media (max-width: 1100px) {
+  .sidebar { width: 210px; padding: 26px 14px 20px; }
+  .main { margin-left: 210px; width: calc(100% - 210px); }
+  .page { padding: 30px 28px 18px; }
+  .topbar { padding: 0 28px; }
+  .flow-visual { display: none; }
+  .profile-layout { grid-template-columns: 180px minmax(0, 1fr); gap: 20px; }
+  .learning-grid { grid-template-columns: 1fr; }
+  .learning-card h3 { margin-top: 12px; }
+}
 @media (max-width: 800px) {
+  .sidebar { position: static; width: 100%; padding: 18px 16px 12px; border-right: 0; border-bottom: 1px solid var(--line); overflow: visible; }
+  .brand { font-size: 23px; padding: 0; }
+  .sidebar nav { margin-top: 16px; gap: 6px; padding: 4px 3px 8px; }
+  .nav-item { min-height: 44px; padding: 10px 12px; font-size: 13px; flex-shrink: 0; }
+  .nav-item.active { box-shadow: inset 0 -2px #315acb; }
+  .sidebar-note, .workspace-label { display: none; }
+  .account { display: flex; padding: 10px 2px 0; gap: 9px; }
+  .account .avatar { width: 30px; height: 30px; }
+  .account small { margin-top: 0; }
+  .sidebar .text-button { min-height: 36px; padding: 6px; }
+  .main { width: 100%; margin: 0; }
+  .topbar { height: 52px; padding: 0 20px; font-size: 12px; }
+  .top-chip { display: none; }
+  .page { padding: 25px 20px 16px; }
+  .page-heading h1 { font-size: 31px; }
+  .chapter-index { font-size: 44px; padding: 0; }
+  .chapter-index > span { letter-spacing: 0; font-size: 10px; }
+  .lead { font-size: 14px; margin-bottom: 22px; }
+  .welcome-card { padding: 24px; }
+  .welcome-card h2 { font-size: 21px; }
+  .panel, .lesson-panel, .profile-form { padding: 22px; }
+  .profile-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .profile-steps > button { min-height: 44px; font-size: 13px; }
+  .step-list { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .step-list button { min-height: 52px; }
+  .tabs { display: flex; gap: 4px; margin: 20px 0; }
+  .tabs button { padding: 10px 13px; font-size: 13px; }
+  .stats { gap: 9px; }
+  .stats > div { padding: 14px 12px; }
+  .stats > div > span { font-size: 12px; }
+  .stats strong { font-size: 26px; }
+  .library-filters { grid-template-columns: minmax(0, 1fr); padding: 18px; gap: 16px; }
+  .code-lab textarea.code-editor { min-height: 320px; padding: 17px; font-size: 14px; }
+  .code-lab .section-title > .tag { display: inline-flex; }
+  .console-panel { padding: 17px; }
+  .prompt-kit { padding: 17px; }
+  .page > .panel:has(> .tabs[aria-label="로그인 또는 회원가입"]) { padding: 24px; }
+  .copyright { width: 100%; margin-left: 0; }
+}
+@media (max-width: 480px) {
+  .page { padding: 24px 16px 14px; }
+  .page-heading h1 { font-size: 28px; }
+  .chapter-index { display: none; }
+  .small-heading { font-size: 25px; }
+  .panel, .lesson-panel, .profile-form, .welcome-card, .assignment-card { padding: 18px; }
+  .workspace-heading h1 { font-size: 23px; }
+  .lesson-panel h2 { font-size: 21px; }
+  .stats { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .stats > div { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; }
+  .stats strong { margin: 0; font-size: 24px; }
+  .code-lab > .lab-actions:has(> .primary) .primary { width: 100%; }
+  .lab-actions > .secondary { flex: 1 1 auto; }
+  input:not([type=radio]):not([type=checkbox]), textarea, select { font-size: 16px; }
+  .code-lab textarea.code-editor { font-size: 14px; padding: 14px; }
+  .prompt-box { padding: 15px; }
+  .prompt-box > div { flex-wrap: wrap; }
   .tutor > *:not(.tutor-header) { margin-left: 16px; margin-right: 16px; }
   .tutor-header { padding: 16px; }
-  .tutor-context { margin: 14px 16px 0; }
-  .welcome-card::before { width: 260px; height: 260px; }
+  .form-actions > .primary { width: 100%; }
+  .toast { width: calc(100% - 32px); min-width: 0; padding: 14px 16px; gap: 14px; }
 }
-
-/* ===========================================================================
-   GUI redesign
-   Same screens, same controls, new skin. The palette moves from the original
-   forest green to violet, because in this product the model is the thing the
-   learner is meant to notice: making the AI accent the brand colour removes
-   the earlier split where "brand" and "AI" were two competing colours.
-   Green survives in one job only - a passing test - where it means correct
-   rather than decorative.
-   Tokens are redefined rather than replaced at each call site, so the whole
-   sheet above inherits the new palette; only hardcoded colours are overridden.
-   =========================================================================== */
-:root {
-  --green: #5b3fd6;        /* primary actions, active states (name kept: used sheet-wide) */
-  --lime: #ffd166;         /* accent on dark surfaces */
-  --line: #e7e4f3;
-  --muted: #6d6889;
-  --ink: #211d3b;
-  --surface: #f8f7fc;
-  --ai: #7c5cf0; --ai-2: #9d86f5; --ai-soft: #f3f0fe; --ai-line: #e3dcfa;
-  --pass: #12996b;         /* a test that passed, and nothing else */
-  --shadow-sm: 0 1px 2px rgba(40,29,90,.06);
-  --shadow-md: 0 10px 28px rgba(40,29,90,.10);
-  color: var(--ink); background: var(--surface);
-}
-body { background: var(--surface); }
-button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline-color: var(--ai); }
-
-/* Sidebar goes dark: it is chrome, and pushing it back makes the learning
-   content the brightest thing on screen. */
-.sidebar { background: #1c1834; border-right-color: #2b2550; color: #cdc7e8; }
-.brand { color: #fff; }
-.brand-icon { background: var(--ai-grad); color: #fff; }
-.beta { border-color: #3d3663; color: #a99fd4; }
-.workspace-label { color: #7d75a8; }
-.nav-item { color: #b3aad8; }
-.nav-item:hover { background: #272145; color: #fff; }
-.nav-item.active { background: var(--ai-grad); color: #fff; box-shadow: 0 4px 14px rgba(124,92,240,.35); }
-.sidebar-note { border-top-color: #2b2550; color: #9990c2; }
-.sidebar-note strong { color: #fff; }
-.sidebar-note > span, .mode-label { color: #8880b2; }
-.account { border-top-color: #2b2550; }
-.account strong { color: #fff; }
-.account small { color: #8880b2; }
-.avatar { background: var(--ai-grad); color: #fff; }
-.sidebar .text-button { color: #b3aad8; white-space: nowrap; font-size: 12px; }
-.sidebar .text-button:hover { color: #fff; }
-.account { gap: 10px; }
-.account > div { min-width: 0; }
-.account strong, .account small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* Topbar and page furniture */
-.topbar { background: rgba(255,255,255,.72); backdrop-filter: blur(8px); border-bottom-color: var(--line); }
-.slash { color: #c3bcd9; }
-.top-chip { color: var(--ai); }
-.eyebrow { color: #8d86ab; }
-.accent { color: var(--ai); }
-.chapter-index { color: #d6d0ea; }
-footer { color: #8d86ab; border-top-color: var(--line); }
-
-/* Hero */
-.welcome-card { background: linear-gradient(135deg, #2d2456 0%, #4b32a8 55%, #6d4bd6 100%); }
-.welcome-card p { color: #d4cdf2; }
-.welcome-card .primary { background: var(--lime); color: #34240a; }
-.welcome-card .primary:hover:not(:disabled) { background: #ffdd8a; }
-.pill { border-color: rgba(255,255,255,.28); color: var(--lime); }
-.flow-visual > div { border-color: rgba(255,255,255,.18); }
-.flow-visual svg { color: #b9aeea; }
-.flow-visual small { color: #b6ade0; }
-.flow-visual .highlight { background: rgba(255,209,102,.10); border-color: rgba(255,209,102,.45); }
-.highlight svg, .highlight span { color: var(--lime); }
-.flow-line { border-left-color: #8d7ccb; }
-
-/* Buttons */
-.primary { background: var(--ai-grad); box-shadow: 0 2px 6px rgba(91,63,214,.30); }
-.primary:hover:not(:disabled) { background: linear-gradient(135deg, #6b4de0, #a892f7); box-shadow: 0 8px 20px rgba(91,63,214,.32); }
-.secondary { border-color: #ded9f1; color: var(--green); }
-.secondary:hover:not(:disabled) { background: var(--ai-soft); border-color: var(--ai); }
-.text-button { color: var(--green); }
-
-/* Stats become cards instead of underlined numbers: they are the learner's
-   scoreboard and were the flattest thing on the page. */
-.stats { gap: 16px; }
-.stats > div { border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 18px 20px; box-shadow: var(--shadow-sm); }
-.stats strong { color: var(--green); }
-
-/* Tabs become a pill group: clearer which surface you are on. */
-.tabs { gap: 6px; border-bottom: 0; background: #f0edfa; padding: 5px; border-radius: 11px; display: inline-flex; }
-.tabs button { padding: 10px 16px; border-radius: 8px; border-bottom: 0; }
-.tabs button.active { background: #fff; color: var(--green); box-shadow: var(--shadow-sm); }
-
-/* Cards, tags, inputs */
-.learning-card, .assignment-card, .repo-card, .panel { border-radius: 12px; }
-.learning-card:hover, .assignment-card:hover, .repo-card:hover { border-color: #c9bdf3; }
-.card-top { color: var(--ai); }
-.card-top > span, .card-bottom { color: #9992b8; }
-.card-bottom { border-top-color: #f0edf8; }
-.tag { background: var(--ai-soft); color: #5b3fd6; }
-.assignment-card:hover { background: #fdfcff; }
-.concept-list span { background: #fff; }
-.concept-list span:hover { border-color: var(--ai); color: var(--ai); }
-.recommendation summary { color: var(--ai); }
-input:not([type=radio]):not([type=checkbox]), textarea, select { background: #fbfaff; border-color: #e2ddf4; color: var(--ink); }
-input[type=radio], input[type=checkbox] { accent-color: var(--ai); }
-.choice.selected { background: var(--ai-soft); border-color: #b7a5f2; }
-.notice { background: var(--ai-soft); border-color: var(--ai-line); color: #4c3a94; }
-.profile-steps > button > span { background: #ece8f8; }
-.profile-steps > button.selected > span { background: var(--ai-grad); color: #fff; }
-progress { background: #ece8f8; accent-color: var(--ai); }
-progress::-webkit-progress-bar { background: #ece8f8; }
-progress::-webkit-progress-value { background: var(--ai-grad); }
-.empty-state { border-color: #ddd6f2; }
-.empty-state > svg, .empty-state h2 { color: var(--green); }
-.toast { background: #2d2456; }
-.search-form { border-color: #ded9f1; }
-
-/* Lesson surfaces */
-.step-list button.active { background: var(--ai-soft); border-color: #c3b4f5; color: var(--green); }
-.step-list button.active > span:first-child { background: var(--ai-grad); box-shadow: 0 0 0 4px #e9e3fb; }
-.step-list .done { background: var(--pass) !important; }
-.prompt-box { background: #f6f4fd; border-color: var(--ai-line); }
-.theory-box > a { color: var(--ai); }
-.experiment-box { border-left-color: var(--lime); }
-.check-list svg { color: var(--pass); }
-.objective { border-color: var(--line); }
-
-/* Quiz keeps result semantics: green only when it is actually right. */
-.quiz-result { background: #eafaf3; color: #0d7a55; }
-.quiz-feedback { background: #fff6e6; color: #7a5a1c; }
-.quiz-feedback.correct { background: #eafaf3; color: #0d7a55; }
-
-/* Code surfaces move to a neutral dark so the violet chrome stays readable. */
-.code-editor { background: #191631; color: #e6e2f7; border-color: #322b5c; }
-.code-editor:focus { outline-color: var(--ai); }
-.console-panel { background: #171430; color: #e6e2f7; border-left-color: var(--ai); }
-.console-panel > strong { color: #a99fd4; }
-.data-preview { background: #f3f1fb; }
-.test-results details { border-left-color: #d08a3c; background: #fff8ee; }
-.test-results .test-pass { border-color: var(--pass); background: #eefaf4; }
-.availability.ok { color: var(--pass); }
-
-/* Scrollbars follow the new palette. */
-.chat-messages::-webkit-scrollbar-thumb, .console-panel pre::-webkit-scrollbar-thumb, .readme::-webkit-scrollbar-thumb, .file-list::-webkit-scrollbar-thumb { background: #cdc5ea; }
-.readme { background: #f7f6fd; }
-.file-list svg { color: var(--ai); }
-.file-list li { border-bottom-color: #f0edf8; }
-
-@media (max-width: 800px) {
-  .sidebar { border-bottom-color: #2b2550; }
-  .tabs { display: flex; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
