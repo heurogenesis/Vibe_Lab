@@ -14,6 +14,7 @@ import { GitHubClient } from '../server/github.js';
 import { FileUserStore } from '../server/store.js';
 import { compileCode, workerProgram, type RunResult } from '../src/runner.js';
 import { loadDataset } from '../src/data-loader.js';
+import { client } from './helpers.js';
 
 const profile={...defaultProfile,personaId:'engineer',major:'전자공학',role:'연구개발 및 PM',domain:'data' as const};
 const folders:string[]=[];
@@ -104,7 +105,7 @@ describe('practice result persistence and sandbox boundary',()=>{
   const folder=await mkdtemp(join(tmpdir(),'vibelab-practice-'));folders.push(folder);
   const file=join(folder,'state.json');const users=new FileUserStore(file);
   const app=createApp(users,new LearningAI(),new GitHubClient());
-  const agent=request.agent(app);
+  const agent=await client(app);
   const learner=(await agent.post('/api/auth/signup').set('X-Vibe-Lab','1').send({handle:'tester01',password:'test-password',displayName:'테스터'}).expect(201)).body;
   const store=users.forUser(learner.id);
   const a=createAssignment(generateRules(profile,[]),profile,'rules');

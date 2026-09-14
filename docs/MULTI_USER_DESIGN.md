@@ -102,13 +102,15 @@ CREATE TABLE IF NOT EXISTS learning_users (
 - 로그인·가입은 1분당 10회로 제한(무차별 대입 방어). 응답 시간 균일화로 계정 존재 추측 방지.
 - 모든 학습 데이터 라우트는 세션이 없으면 401(fail-closed). 서버는 `127.0.0.1`에만 바인딩되고 `/api`는 localhost 외 host를 거부.
 
+**이후 처리된 것 (2026-09-14)**
+1. ~~`cookie.secure = true` + HTTPS~~ → `PUBLIC_ORIGIN`이 설정되면 `secure`로 전환됩니다. 함께 `trust proxy`를 loopback으로 두었는데, 이것이 없으면 프록시가 넘긴 평문 HTTP를 Express가 insecure로 보고 `express-session`이 `Set-Cookie`를 통째로 생략합니다(문서화된 동작). 실제로 이 때문에 터널 뒤에서 로그인이 조용히 실패했습니다.
+2. ~~세션 저장소가 메모리~~ → `connect-pg-simple`로 교체. 세션 테이블(`learning_sessions`)은 `db/001_initial.sql`에 선언되어 있고 `createTableIfMissing: false`입니다. DDL 권한 없는 배포에서 조용히 메모리로 떨어지지 않고 크게 실패합니다. 파일 저장소(로컬 체험)만 메모리 세션을 씁니다.
+3. ~~`SESSION_SECRET` 환경변수~~ → `.env.example`에 문서화. 미설정 시 경고는 그대로 남습니다.
+4. ~~실제 CSRF 토큰~~ → `server/csrf.ts`. 세션에 보관하는 synchronizer 토큰이며, 변경 요청은 `X-CSRF-Token`이 세션의 값과 일치해야 합니다(timing-safe 비교). `GET /api/auth/csrf`가 발급하고, 안전 메서드(GET/HEAD/OPTIONS)는 면제됩니다. 검증 미들웨어는 세션 직후·인증 라우트 **앞**에 마운트되어 로그인 위조도 막습니다. `req.login`이 세션을 재생성할 때 토큰 값만 넘겨받아(세션 id는 정상적으로 회전) 로그인마다 요청이 한 번 거부되는 일이 없게 했습니다. `X-Vibe-Lab` 헤더는 값싼 1차 필터로만 남습니다.
+6. ~~레이트 리밋을 사용자 기준으로~~ → AI 라우트(`expensive`)는 `req.user.id` 기준입니다. 교실·사무실처럼 IP를 공유하는 곳에서 한 학습자가 남의 몫까지 소진하지 못하게 합니다. `/api` 전체 리미터는 세션보다 먼저 실행되고 사용량이 아니라 물량을 막는 것이므로 IP 기준을 유지합니다.
+
 **아직 안 되어 있는 것 (remote 공개 전 필수)**
-1. `cookie.secure = true` + HTTPS. 지금은 로컬 http라 false입니다.
-2. 세션 저장소가 메모리입니다. 서버를 재시작하면 모두 로그아웃됩니다. Postgres 사용 시 `connect-pg-simple` 등으로 교체해야 합니다.
-3. `SESSION_SECRET` 환경변수. 미설정 시 재시작마다 임의 값이 생성되어 기존 세션이 무효화됩니다(경고 로그를 남깁니다).
-4. 실제 CSRF 토큰. 현재의 `X-Vibe-Lab` 헤더 검사는 localhost 한정의 약한 방어입니다.
-5. `/api`의 localhost host 검사를 제거가 아니라 **대체**(인증 미들웨어 + 적절한 CORS로).
-6. 레이트 리밋을 IP 기준에서 사용자 기준으로 보강.
+5. `/api`의 localhost host 검사는 여전히 host 기반입니다. `PUBLIC_ORIGIN`으로 정확히 한 개의 오리진을 더 허용하도록 확장했을 뿐, 인증 미들웨어 + 적절한 CORS로의 **대체**는 하지 않았습니다.
 7. 비밀번호 재설정 경로가 없으므로, 공개 전에는 이메일 인증 또는 복구 수단이 필요합니다.
 
 ## 7. 작업 단계

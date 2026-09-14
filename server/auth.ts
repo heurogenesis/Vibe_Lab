@@ -9,6 +9,7 @@ import { rateLimit } from 'express-rate-limit';
 import { loginSchema, signupSchema, userHandleSchema, type User } from '../shared/schema.js';
 import { ApiError } from './github.js';
 import { DuplicateHandleError, type UserStore } from './store.js';
+import { issueCsrfToken, loginPreservingCsrf, verifyCsrf } from './csrf.js';
 // Passport fills req.user from the session; this is the shape it carries. Password hashes never appear here.
 declare global {
   namespace Express {
@@ -63,7 +64,13 @@ export function attachAuth(app: express.Express, users: UserStore) {
     // HTTPS (e.g. behind Cloudflare Tunnel). See docs/MULTI_USER_DESIGN.md section 5.
     cookie: { httpOnly: true, sameSite: 'lax', secure: !!process.env.PUBLIC_ORIGIN, maxAge: 7 * 24 * 60 * 60 * 1000 },
   }), auth.initialize(), auth.session());
+  // Mounted here, between the session and every route that follows, so the sign-in routes are covered too:
+  // a forged login is a real attack (it lands the victim in the attacker's account). Safe methods pass through.
+  app.use('/api', verifyCsrf);
   const router = express.Router();
+  // The client fetches this once and caches it. Creating the session here is deliberate: saveUninitialized is
+  // false, so without a write there would be no session to bind the token to before sign-in.
+  router.get('/csrf', (req, res) => res.json({ token: issueCsrfToken(req) }));
   // Brute force guard, deliberately stricter than the general /api limit.
   const attempts = rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: '시도가 너무 많습니다. 1분 후 다시 시도해 주세요.' } });
   router.get('/session', (req, res) => {
@@ -85,7 +92,7 @@ export function attachAuth(app: express.Express, users: UserStore) {
     // between the availability check above and this call.
     try { created = await users.createUser({ handle: body.handle, displayName: body.displayName, passwordHash: await bcrypt.hash(body.password, BCRYPT_ROUNDS) }); }
     catch (error) { if (error instanceof DuplicateHandleError) throw new ApiError(409, error.message); throw error; }
-    req.login(created, error => error ? next(error) : res.status(201).json(created));
+    loginPreservingCsrf(req, created, error => error ? next(error) : res.status(201).json(created));
   });
   router.post('/login', attempts, (req, res, next) => {
     loginSchema.parse(req.body);
@@ -93,7 +100,7 @@ export function attachAuth(app: express.Express, users: UserStore) {
       if (error) return next(error);
       // One message for both cases: never say which half was wrong.
       if (!user) return next(new ApiError(401, '아이디 또는 비밀번호가 올바르지 않습니다.'));
-      req.login(user, loginError => loginError ? next(loginError) : res.json(user));
+      loginPreservingCsrf(req, user, loginError => loginError ? next(loginError) : res.json(user));
     })(req, res, next);
   });
   router.post('/logout', (req, res, next) => {

@@ -1,6 +1,6 @@
 import express from 'express';
 import helmet from 'helmet';
-import { rateLimit } from 'express-rate-limit';
+import { ipKeyGenerator, rateLimit } from 'express-rate-limit';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { z } from 'zod';
@@ -62,7 +62,13 @@ export function createApp(users: UserStore, ai: LearningAI, github: GitHubClient
   app.use(express.json({ limit: '64kb' }));
   // Session, Passport and every /api/auth route. Mounted before the guard so signing in is possible.
   attachAuth(app, users);
-  const expensive = rateLimit({ windowMs: 60_000, limit: 12, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: 'AI 요청이 많습니다. 1분 후 다시 시도해 주세요.' } });
+  // Keyed per learner rather than per IP: these routes cost money, and a shared address (a classroom, an
+  // office, a NAT) would otherwise let one learner exhaust everyone else's budget. Falls back to the IP for
+  // requests that arrive without a session. The general /api limiter above stays IP-keyed on purpose - it
+  // runs before the session exists and guards against volume, not spend.
+  const expensive = rateLimit({ windowMs: 60_000, limit: 12, standardHeaders: 'draft-8', legacyHeaders: false,
+    keyGenerator: (req: express.Request) => req.user?.id || ipKeyGenerator(req.ip || ''),
+    message: { error: 'AI 요청이 많습니다. 1분 후 다시 시도해 주세요.' } });
   // Health answers before anyone signs in, and deliberately exposes no account information.
   app.get('/api/health', async (_req, res) => { await users.countUsers(); res.json({ storage: users.mode, ai: ai.enabled, githubAuthenticated: !!options.githubAuthenticated, localOnly: true }); });
   // Everything past this point belongs to exactly one signed-in learner. Identity lives in server/identity.ts.

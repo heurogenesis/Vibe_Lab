@@ -10,6 +10,7 @@ import { GitHubClient, parseRepositoryUrl } from '../server/github.js';
 import { createAssignment, generateRules } from '../server/curriculum.js';
 import { FileUserStore, PostgresUserStore } from '../server/store.js';
 import { curriculumSchema, defaultProfile, type Profile, type PublicAssignment } from '../shared/schema.js';
+import { client, refreshCsrf } from './helpers.js';
 // 경영학 is a real discipline since 2026-09-12, which routes to the executable practice catalog.
 // Tests that need the project/AI path use a major no discipline claims, so the routing is stated, not assumed.
 const projectProfile = { ...defaultProfile, major: '융합 전공' };
@@ -20,8 +21,9 @@ async function setup() {
   const users = new FileUserStore(join(folder,'state.json'));
   const github = new GitHubClient();
   const app = createApp(users,new LearningAI(),github);
-  // A signed-in agent: supertest keeps the session cookie between requests, exactly like a browser.
-  const agent = request.agent(app);
+  // A signed-in agent: supertest keeps the session cookie between requests, exactly like a browser,
+  // and carries the CSRF token the same way the real client does.
+  const agent = await client(app);
   const signup = await agent.post('/api/auth/signup').set('X-Vibe-Lab','1').send({handle:'tester01',password:'test-password',displayName:'테스터'}).expect(201);
   const userId = signup.body.id as string;
   return {users,store:users.forUser(userId),app,github,agent,userId};
@@ -58,6 +60,12 @@ describe('learner workflow via HTTP',()=> {
     await agent.put('/api/profile').set('X-Vibe-Lab','1').send({...defaultProfile,name:' '}).expect(400);
     await agent.get('/api/no-such-route').expect(404);
     await agent.post('/api/assignments/missing/chat').set('X-Vibe-Lab','1').send({message:'hello',lessonIndex:0}).expect(404);
+    // A signed-in session is not on its own permission to change anything: the browser attaches that cookie
+    // to a forged cross-site request too. Without the session's token, or with someone else's, the write dies.
+    await agent.put('/api/profile').set('X-CSRF-Token','').send(defaultProfile).expect(403);
+    await agent.put('/api/profile').set('X-CSRF-Token','f'.repeat(64)).send(defaultProfile).expect(403);
+    // Reading is still allowed without one, which is what keeps the token fetchable in the first place.
+    await agent.get('/api/state').set('X-CSRF-Token','').expect(200);
   });
   it('serializes concurrent progress updates without losing either step',async()=> {
     const {agent,store}=await setup();
@@ -124,22 +132,26 @@ describe('repository boundaries',()=> {
 describe('accounts and sessions',()=> {
   it('enforces the id rules, blocks duplicates and keeps every workspace private',async()=> {
     const {agent,app}=await setup();
-    for(const handle of ['short1','alllettersonly','1234567890']) await request(app).post('/api/auth/signup').set('X-Vibe-Lab','1').send({handle,password:'test-password',displayName:'x'}).expect(400);
-    await request(app).post('/api/auth/signup').set('X-Vibe-Lab','1').send({handle:'sora1234',password:'short',displayName:'소라'}).expect(400);
+    const anonymous=await client(app);
+    for(const handle of ['short1','alllettersonly','1234567890']) await anonymous.post('/api/auth/signup').send({handle,password:'test-password',displayName:'x'}).expect(400);
+    await anonymous.post('/api/auth/signup').send({handle:'sora1234',password:'short',displayName:'소라'}).expect(400);
     expect((await request(app).get('/api/auth/available').query({handle:'tester01'}).expect(200)).body.available).toBe(false);
     expect((await request(app).get('/api/auth/available').query({handle:'sora1234'}).expect(200)).body.available).toBe(true);
-    const sora=request.agent(app);
-    const created=await sora.post('/api/auth/signup').set('X-Vibe-Lab','1').send({handle:'Sora1234',password:'test-password',displayName:'소라'}).expect(201);
+    const sora=await client(app);
+    const created=await sora.post('/api/auth/signup').send({handle:'Sora1234',password:'test-password',displayName:'소라'}).expect(201);
     expect(created.body.handle).toBe('sora1234');
     expect(created.body).not.toHaveProperty('passwordHash');
-    await request(app).post('/api/auth/signup').set('X-Vibe-Lab','1').send({handle:'SORA1234',password:'test-password',displayName:'중복'}).expect(409);
+    await anonymous.post('/api/auth/signup').send({handle:'SORA1234',password:'test-password',displayName:'중복'}).expect(409);
     await request(app).get('/api/state').expect(401);
-    await request(app).post('/api/auth/login').set('X-Vibe-Lab','1').send({handle:'sora1234',password:'wrong-password'}).expect(401);
+    await anonymous.post('/api/auth/login').send({handle:'sora1234',password:'wrong-password'}).expect(401);
     await sora.put('/api/profile').set('X-Vibe-Lab','1').send({...defaultProfile,name:'소라'}).expect(200);
     expect((await agent.get('/api/state').expect(200)).body.profile).toBeNull();
     expect((await sora.get('/api/state').expect(200)).body.profile.name).toBe('소라');
     await sora.post('/api/auth/logout').set('X-Vibe-Lab','1').expect(204);
     await sora.get('/api/state').expect(401);
+    // Logging out took the CSRF token with the session; signing back in needs a new one.
+    await sora.post('/api/auth/login').send({handle:'sora1234',password:'test-password'}).expect(403);
+    await refreshCsrf(sora);
     await sora.post('/api/auth/login').set('X-Vibe-Lab','1').send({handle:'sora1234',password:'test-password'}).expect(200);
     expect((await sora.get('/api/state').expect(200)).body.profile.name).toBe('소라');
   });
