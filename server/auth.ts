@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import express from 'express';
 import session from 'express-session';
+import connectPgSimple from 'connect-pg-simple';
 import passport from 'passport';
 import { Strategy as LocalStrategy } from 'passport-local';
 import bcrypt from 'bcryptjs';
@@ -8,6 +9,7 @@ import { rateLimit } from 'express-rate-limit';
 import { loginSchema, signupSchema, userHandleSchema, type User } from '../shared/schema.js';
 import { ApiError } from './github.js';
 import { DuplicateHandleError, type UserStore } from './store.js';
+import { issueCsrfToken, loginPreservingCsrf, verifyCsrf } from './csrf.js';
 // Passport fills req.user from the session; this is the shape it carries. Password hashes never appear here.
 declare global {
   namespace Express {
@@ -45,8 +47,16 @@ export function attachAuth(app: express.Express, users: UserStore) {
     try { done(null, (await users.findUser(id)) || false); }
     catch (error) { done(error as Error); }
   });
+  // Sessions live in PostgreSQL when it is the storage backend, so a restart or a second instance behind a
+  // load balancer keeps everyone signed in. The file-store (local demo) path stays on the in-memory store,
+  // which is fine for one process and avoids requiring a database just to try the app.
+  const sessionStore = users.pool
+    ? new (connectPgSimple(session))({ pool: users.pool, tableName: 'learning_sessions', createTableIfMissing: false })
+    : undefined;
+  if (!sessionStore) console.warn('Sessions are stored in memory: restarting the server signs everyone out.');
   app.use('/api', session({
     name: 'vibe.sid',
+    store: sessionStore,
     secret: sessionSecret(),
     resave: false,
     saveUninitialized: false,
@@ -54,7 +64,13 @@ export function attachAuth(app: express.Express, users: UserStore) {
     // HTTPS (e.g. behind Cloudflare Tunnel). See docs/MULTI_USER_DESIGN.md section 5.
     cookie: { httpOnly: true, sameSite: 'lax', secure: !!process.env.PUBLIC_ORIGIN, maxAge: 7 * 24 * 60 * 60 * 1000 },
   }), auth.initialize(), auth.session());
+  // Mounted here, between the session and every route that follows, so the sign-in routes are covered too:
+  // a forged login is a real attack (it lands the victim in the attacker's account). Safe methods pass through.
+  app.use('/api', verifyCsrf);
   const router = express.Router();
+  // The client fetches this once and caches it. Creating the session here is deliberate: saveUninitialized is
+  // false, so without a write there would be no session to bind the token to before sign-in.
+  router.get('/csrf', (req, res) => res.json({ token: issueCsrfToken(req) }));
   // Brute force guard, deliberately stricter than the general /api limit.
   const attempts = rateLimit({ windowMs: 60_000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: '시도가 너무 많습니다. 1분 후 다시 시도해 주세요.' } });
   router.get('/session', (req, res) => {
@@ -76,7 +92,7 @@ export function attachAuth(app: express.Express, users: UserStore) {
     // between the availability check above and this call.
     try { created = await users.createUser({ handle: body.handle, displayName: body.displayName, passwordHash: await bcrypt.hash(body.password, BCRYPT_ROUNDS) }); }
     catch (error) { if (error instanceof DuplicateHandleError) throw new ApiError(409, error.message); throw error; }
-    req.login(created, error => error ? next(error) : res.status(201).json(created));
+    loginPreservingCsrf(req, created, error => error ? next(error) : res.status(201).json(created));
   });
   router.post('/login', attempts, (req, res, next) => {
     loginSchema.parse(req.body);
@@ -84,7 +100,7 @@ export function attachAuth(app: express.Express, users: UserStore) {
       if (error) return next(error);
       // One message for both cases: never say which half was wrong.
       if (!user) return next(new ApiError(401, '아이디 또는 비밀번호가 올바르지 않습니다.'));
-      req.login(user, loginError => loginError ? next(loginError) : res.json(user));
+      loginPreservingCsrf(req, user, loginError => loginError ? next(loginError) : res.json(user));
     })(req, res, next);
   });
   router.post('/logout', (req, res, next) => {

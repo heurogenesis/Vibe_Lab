@@ -856,3 +856,130 @@ prompts.chat 연동 조사 결과(브라우저 실측):
      종료해 노출을 닫을 것.
 사용자 승인 또는 결정이 필요한 사항: 없음.
 ```
+### 2026-09-14 (17차) 세션 영속화 · AWS 이전 준비 · GUI 재디자인
+
+```text
+날짜 / 담당 AI: 2026-09-14 / Claude Code
+작업 목적: 사용자 요청 - "서버 설정 마무리 / 로컬에서 기능 전부 테스트 가능하게 / 추후 AWS로
+  DB와 Server 이전하기 편하도록 / UI를 AI 활용 교육서비스 느낌으로". 이어서 "GUI도 재디자인 -
+  기능 버튼과 구성은 같아도 되지만 색상과 위치를 조정".
+브랜치: feature/mvp-savepoint-20260912
+추가한 의존성 (package.json - 사용자 승인함): connect-pg-simple, @types/connect-pg-simple.
+  npm audit 취약점 0건. 사용자가 "직접 구현" 대신 검증된 어댑터를 선택함.
+
+변경 파일:
+  server/store.ts - UserStore 인터페이스에 optional pool 노출. PostgresUserStore의 pool을
+    private -> readonly 로 변경. 파일 저장소에는 pool이 없어 자연스럽게 메모리 세션으로 떨어짐.
+  server/auth.ts - users.pool이 있으면 connect-pg-simple 세션 저장소 사용. 없으면 경고 로그 후 메모리.
+  server/index.ts - HOST 환경변수(기본 127.0.0.1 유지), RDS용 TLS 설정(DATABASE_CA_CERT /
+    DATABASE_SSL), 기동 로그에 sessions 표시.
+  db/001_initial.sql - learning_sessions 테이블 추가. createTableIfMissing:false 로 두어
+    DDL 권한이 없는 배포에서 조용히 메모리로 떨어지지 않고 크게 실패하도록 함.
+  tests/postgres.integration.test.ts - 픽스처 행을 먼저 삭제. 연속 실행 시 실패하던 문제 해결.
+  .env.example - SESSION_SECRET, PUBLIC_ORIGIN, HOST, DATABASE_SSL, DATABASE_CA_CERT 문서화.
+  src/Workspace.tsx, src/CodeLab.tsx, src/styles.css - 아래 UI 작업.
+
+AWS 이전 관점에서 해결된 것:
+  1) 세션이 앱 메모리가 아니라 DB에 있으므로 EC2 재기동·다중 인스턴스(ALB)에서 로그인이 유지됨.
+     이것이 단일 인스턴스 가정을 깨는 유일한 구조적 걸림돌이었음.
+  2) 바인딩 주소가 환경변수화됨. 로컬은 여전히 루프백이라 실수로 노출되지 않음.
+  3) RDS TLS 경로 확보. CA 없이 DATABASE_SSL=true만 쓰면 암호화는 되지만 검증은 안 된다는 점을
+     경고 로그로 명시함(조용히 안전한 척하지 않음).
+
+UI 작업 (두 단계):
+  (1) AI 존재감 - 튜터 패널에 그라디언트 헤더·아바타·상태 배지(AI 연결 여부를 사실대로 표시)·
+      현재 단계 칩·생각중 애니메이션 추가. 히어로에 오로라 질감. 프롬프트 킷에 동일 악센트.
+  (2) GUI 재디자인 - 팔레트를 초록에서 보라로 이동. 근거: 이 제품에서 학습자가 주목해야 할 것이
+      모델이므로 AI 악센트를 브랜드색으로 올리면 "브랜드색"과 "AI색"이 경쟁하던 구조가 사라짐.
+      초록은 "테스트 통과"라는 의미 하나만 담당하도록 남김(--pass).
+      사이드바를 다크로 전환해 학습 콘텐츠가 화면에서 가장 밝은 요소가 되게 함.
+      통계는 밑줄 숫자에서 카드로, 탭은 밑줄에서 pill 그룹으로.
+      토큰(--green/--lime/--line/--muted)을 재정의해 기존 시트 전체가 새 팔레트를 상속하게 하고,
+      하드코딩된 색만 개별 override 함.
+  시도했다가 되돌린 것: 단계 목록에 연결선을 그려 "학습 경로"처럼 보이게 하려 했으나, 불투명한
+    카드 뒤로 지나가 간격에서만 보여 의도가 아니라 결함처럼 읽혔음. 제거하고 주석에 근거를 남김.
+
+검증 명령과 실제 결과:
+  - npm run typecheck: 통과
+  - npm test (TEST_DATABASE_URL 설정): 189 passed. 연속 2회 실행해도 통과하는 것을 확인
+    (16차에서 기록한 "연속 실행 시 실패" 문제가 해결됨)
+  - npm run db:migrate: learning_sessions 테이블 생성 확인
+  - npm run build: 통과. CSS 25.42 -> 29.20 -> 최종 번들 생성 확인
+  - 세션 영속성 실측: 로그인(200) -> 서버 프로세스 강제 종료 -> 재기동 -> 같은 쿠키로
+    /api/auth/session 200 + 사용자 정보 반환. 기동 로그도 "sessions: postgresql".
+    psql로 learning_sessions 행 생성도 직접 확인.
+  - 중간에 잘못된 검증 1회: PUBLIC_ORIGIN이 설정된 상태에서 평문 HTTP(127.0.0.1)로 테스트해
+    쿠키가 발급되지 않아 401이 났음. 16차에서 고친 secure 쿠키 동작이 정상 작동한 것이지
+    세션 저장소 결함이 아니었음. PUBLIC_ORIGIN을 비우고 재검증함.
+  - UI: 계산된 스타일로 사이드바/탭/콘솔/단계마커/프롬프트킷 적용 확인. 가로 오버플로 없음
+    (body.scrollWidth == clientWidth). 사이드바 대비 #1c1834 배경 / #b3aad8 텍스트.
+    ※ 브라우저 창이 백그라운드일 때 스크린샷이 간헐적으로 빈 화면으로 캡처됨 - DOM 검사로
+      콘텐츠가 정상 배치됨을 확인했으나, 최종 육안 검수는 사용자가 직접 할 필요가 있음.
+
+남은 문제 / 다음 작업:
+  1) Cloudflare Quick Tunnel은 현재 내려가 있음. .env의 PUBLIC_ORIGIN도 비워둔 상태(로컬 모드).
+     다시 공개하려면 cloudflared 실행 -> 새 주소를 PUBLIC_ORIGIN에 넣고 서버 재시작.
+  2) 실제 CSRF 토큰 미도입. docs/MULTI_USER_DESIGN.md 5절의 비밀번호 재설정 경로,
+     사용자 기준 레이트 리밋도 그대로 남음.
+  3) PracticeLibrary가 180개 실습을 전부 노출하고 언어 필터가 없음(9차부터 누적).
+  4) AI 튜터는 여전히 규칙 기반. OPENAI_API_KEY 미연결이라 화면에 "RULES"로 표시됨.
+     실제 공급자·모델 확인 후 연결 필요(ROADMAP P1-02).
+  5) AWS 실제 배포(CLOUD-01~04)는 미착수. 이번 작업은 "이전이 가능한 상태"까지이고
+     EC2/RDS 생성·IaC·배포 자동화는 하지 않았음.
+사용자 승인 또는 결정이 필요한 사항: 없음.
+```
+
+### 2026-09-14 · UI-FOCUS-01 / Codex — 학습 중심 CSS 개선
+
+- 사용자 최신 지시: GitHub의 현재 작업 상태를 확인하고 `src/styles.css`를 직접 수정. 이번 CSS 작업은 사용자의 명시적 구현 요청에 따라 Codex가 수행했습니다.
+- 기준: `feature/mvp-savepoint-20260912` / `f8b3e85`. Fetch 후 origin 작업 브랜치도 같은 커밋임을 확인. `origin/main`은 `769a719`(PR #1 병합)이며 현재 작업 브랜치에는 그 이후 세션·CSRF·UI 변경이 있어 이를 유지했습니다.
+- 변경 파일: `src/styles.css`, `PROGRESS.md`.
+- 디자인: 밝은 학습 공간과 차분한 파란색 실행 버튼, 별도 보라색 도움 영역, 녹색 통과/황색 확인 필요 결과. 큰 보라색 장식과 상시 애니메이션을 제거하고 기존 테마 덮어쓰기 구간을 교체했습니다.
+- 가독성: 설명 본문·코드 글자 및 행간 확대, 넓은 코드 입력란, 목표 강조, 실행 도구 묶음, 좁은 화면에서 튜터를 실습 아래로 배치. 일반 textarea 스타일보다 코드 편집기 스타일이 우선하도록 명시했습니다.
+- 접근성: 키보드 초점 표시, 주요 버튼 44px 이상, 색상 외 기존 결과 문구 유지, reduced-motion 지원, 모바일 로그아웃 접근 유지. CSS만으로 학습 효과가 향상됐다고 검증한 것은 아닙니다.
+- 실제 검증:
+  - `npm.cmd run build`: 통과. 기존 Zod 주석 및 TypeScript 청크 크기 경고는 남음.
+  - `npm.cmd test`: 188 passed / 1 skipped. 실제 PostgreSQL 통합 테스트를 이번 작업에서 실행하지 않았습니다.
+  - `git diff --check`: 통과(줄바꿈 LF→CRLF 안내만 발생).
+  - 실제 앱의 새 CSS 로딩 확인. 로그인 이후 화면은 동일한 프로덕션 번들과 인메모리 합성 응답을 제공하는 임시 로컬 검수 서버로 확인했습니다. 실제 계정·프로필·DB는 수정하지 않았습니다.
+  - 합성 데이터 검수: 학습실→단계별 실습, 그룹 평균 빈칸 실행 1/4→수정 후 4/4 통과, 콘솔·상태 카드 표시, 자료실 전공/검색 필터, 프로필 1→2단계 전환 확인.
+  - 실습 1440px: 편집기 폭 727px, 튜터 300px. 편집기 실제 배경 #172236 / 글자 #e4ecf8 / 14px 확인.
+  - 모바일 실습·자료실 390px, 프로필 360/768/1024/1440px에서 문서 가로 넘침 없음. 긴 코드와 모바일 내비게이션은 해당 영역 안에서 스크롤됩니다.
+- Git/공유: 두 변경 파일만 로컬 커밋으로 기록. 원격 Push·main 병합은 수행하지 않습니다. 기존 미추적 `.claude/`는 보존했습니다.
+- 후속: 사용자의 실제 로그인 상태에서 디자인 확인 후 Fork로 커밋 검토·공유. LLM 연결·AWS 배포 및 자료실 언어 필터 추가 등 기능 작업은 이번 범위에 포함하지 않았습니다.
+
+### 2026-09-14 · UI-ALIGN-02 / Codex — 인증 화면 중앙 정렬·메뉴 밑줄
+
+- 사용자 요청에 따라 `src/styles.css` 수정. 기준 커밋 `baaf69f`의 상단 내비게이션 구조를 유지했습니다.
+- 로그인·회원가입 패널을 최대 560px, 좌우 자동 여백으로 중앙 정렬하고 해당 화면의 제목·안내 문구도 중앙 정렬했습니다. 입력 필드와 다른 학습 화면의 본문 정렬은 유지했습니다.
+- `.top-nav .nav-item.active`의 이전 사이드바용 inset 그림자를 제거해 ㄴ자 대신 하단 2px 밑줄만 표시합니다. 키보드 focus-visible 외곽선은 유지합니다.
+- 검증: 실제 브라우저에서 패널과 콘텐츠 영역 중심 차이 0px, 선택 메뉴 box-shadow none / 왼쪽 테두리 0px / 하단 테두리 2px 확인. `npm.cmd run build`, `git diff --check` 통과. 기존 Zod 주석·큰 청크 경고 유지. CSS 소규모 배치 변경으로 전체 테스트는 재실행하지 않았습니다.
+- 변경 파일: `src/styles.css`, `PROGRESS.md`. 로컬 커밋만 작성하고 Push·main 병합은 하지 않습니다. 기존 `.claude/` 미추적 파일은 보존했습니다.
+- 다음: 사용자 화면에서 로그인·회원가입 및 상단 메뉴 표시 확인.
+
+
+### 2026-09-15 · DEPLOY-PREP-01 / Codex — 무료 평가 공개 우선, AWS 전환 안내
+
+- 기준: feature/mvp-savepoint-20260912 / a91cbff. 사용자 배포 준비 요청 후 추가 비용 없는 방향 요청을 반영했습니다.
+- 변경 파일: docs/FREE_DEMO.md, docs/AWS_DEPLOYMENT.md, ROADMAP.md, PROGRESS.md. 제품 코드와 설정은 변경하지 않았습니다.
+- 현재 방향: 로컬 PostgreSQL + 운영 빌드 Express + Cloudflare Quick Tunnel의 무료 임시 HTTPS 공개. PC 가동 필요·주소 변경·SSE 미지원 등 제한 명시. AWS 구성은 향후 전환 참고로 보류.
+- 코드 확인: 인증/CSRF/DB 세션/사용자별 고비용 요청 제한과 PostgreSQL CI 정의 존재. 과거 기록의 CSRF·사용자별 제한 미도입 항목은 현재 코드와 다릅니다.
+- RDS 전환 시: migrate.ts가 앱의 CA 환경변수를 사용하지 않고, 컴파일된 migrate의 SQL 경로도 빌드 산출물과 맞지 않음. 인증서 검증 psql 초기화 절차와 후속 보완점 문서화.
+- AI: 출력 제한은 있으나 누적 예산 차단·일일 한도·소진 시 자동 규칙 모드 전환은 미구현. 제공된 키의 모델·잔액·과금 조건은 미확인. 키 연결만으로 검수형 실습이 생성형 자료로 바뀌지는 않음을 명시.
+- 검증: 해당 서버·인증·AI·마이그레이션·빌드·CI 코드를 읽고 공식 Cloudflare/AWS/OpenAI/node-postgres 문서와 대조. 문서 작업이므로 빌드/테스트 재실행 없음. 직전 UI 커밋 빌드 통과와 과거 테스트 기록을 신규 검증으로 취급하지 않았습니다. 실제 AWS/공개 터널/API 연결 검증은 이번에 수행하지 않았습니다.
+- Git/공유: 위 문서 4개만 로컬 커밋으로 기록하며 Push·main 병합은 하지 않습니다. 기존 미추적 .claude/ 보존.
+- 다음 시작점: ROADMAP FREE-01~04. 실제 API 키를 채팅으로 받지 않고 사용 조건을 먼저 확인. 추가 비용을 발생시키는 리소스 생성 없음.
+
+
+### 2026-09-15 · CONTENT-01 / Codex — 실습 다양화·DB 문제 은행
+
+- 사용자 명시적 구현 요청에 따라 제품 코드 수정. 기준 32cd887, 기존 .claude/ 보존.
+- 원인: practice-curriculum.ts와 curriculum.ts에 동일한 고정 이해도 3문항이 존재했음.
+- 구현: 중앙값·최근 3개 행 이동평균·고정 기준 정규화 54개 TypeScript 실습 추가. 전체 234개(126 TS / 54 SQL / 54 R). 신규 ID만 추가하여 기존 실행 계약 버전은 유지.
+- 문제 은행: 27개 계산/개념 템플릿, 234개 예제 묶음(각 3개 문제·해설·매개변수). 실제 로컬 PostgreSQL vibelab에 저장 완료. 학습자 기록은 수정하지 않음.
+- 생성 경로: PostgreSQL 템플릿 조회 → 실습별 수치/유형/선택지 순환 → 과제 스냅샷 저장. 예제 풀이와 평가 수치는 분리. 후속 TS 과제에 신규 알고리즘 순환, SQL/R은 지원 테마 유지. 이전 과제·채점 결과 보존.
+- 미래 API: 검증된 매개변수와 허용 계산기로 정답 재계산하는 서버 함수 제공. 공개 편집 API·LLM 자동 출제 호출은 이번 범위에 없음. DB 예제 저장본과 브라우저 실행 카탈로그 경계는 docs/CONTENT_BANK.md에 명시.
+- 실제 검증: 초기 4개 정규화 참조 테스트의 음수 하한 문자열 보간 오류를 수정. 앱 계정 CREATE DATABASE 권한이 없어 새 테스트 DB 생성은 실패했고, 이미 있는 별도 vibelab_test로 전환. 최종 전체 249 passed / 0 skipped. npm run build 통과(기존 Zod 주석·큰 청크 경고 유지). 실제 Chrome 신규 화면 검수는 미수행.
+- 변경: shared/catalog.ts, shared/extended-exercises.ts; server/question-bank.ts, learning-content-store.ts, seed-learning-content.ts, practice-curriculum.ts, curriculum.ts, ai.ts, app.ts; tests/question-bank.test.ts, content-postgres.test.ts, practice.test.ts, learning.test.ts; README.md, docs/CONTENT_BANK.md, PROGRESS.md.
+- Git/공유: 사용자 후속 요청에 따라 구현 커밋 05f9ac8을 origin/feature/mvp-savepoint-20260912에 Push했고 원격 SHA 일치를 확인했습니다. 이전 UI·무료 배포 문서 커밋도 함께 공유됐습니다. main 병합은 하지 않았습니다. 실제 DB 내용은 Git에 올라가지 않으며 seed 스크립트로 재현합니다. 이 공유 상태 기록도 같은 브랜치에 후속 문서 커밋으로 반영합니다.
+- 다음: 화면 새로고침 후 새 맞춤 과제 또는 자료실 신규 테마에서 확인. 다른 환경에서는 기존 DB 마이그레이션 뒤 seed-learning-content.ts 실행 필요. 무료 평가 공개와 API 사용량 제한 작업은 미완료 상태 유지.

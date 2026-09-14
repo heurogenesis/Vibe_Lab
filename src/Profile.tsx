@@ -3,9 +3,10 @@ import { ArrowLeft, ArrowRight, Check, Sparkles } from 'lucide-react';
 import { defaultProfile, domainLabels, levelLabels, profileSchema, styleLabels, type Profile as LearnerProfile } from '../shared/schema';
 import { disciplines, personas, themes } from '../shared/catalog';
 import { aiTools, environments, languages, outputTargets, promptSkills, resolveLanguage, resolveOutputTarget, resolveRole, roles } from '../shared/taxonomy';
-export default function Profile({ initial, onSave, busy }: { initial: LearnerProfile | null; onSave: (profile: LearnerProfile) => Promise<void>; busy: boolean }) {
+export default function Profile({ initial, onSave, busy, initialStep = 0 }: { initial: LearnerProfile | null; onSave: (profile: LearnerProfile) => Promise<void>; busy: boolean; initialStep?: number }) {
   const [profile, setProfile] = useState<LearnerProfile>(initial || {...defaultProfile, personaId:'engineer', domain:'data', major:'', role:'엔지니어', goal:'업무 데이터를 정제하고 결과를 비교하는 코드를 직접 작성하고 이해하고 싶어요.', minutes:30});
-  const [step, setStep] = useState(0); const [error, setError] = useState('');
+  // Which step the header menu asked for; the step buttons still move freely from here.
+  const [step, setStep] = useState(initialStep); const [error, setError] = useState('');
   const update = <K extends keyof LearnerProfile>(key: K, value: LearnerProfile[K]) => setProfile(p => ({ ...p, [key]: value }));
   // Show the learner which bounded category their words landed in, so the classification is never a surprise.
   const detectedRole = resolveRole({ role: profile.role, roleId: profile.roleId, goal: profile.goal });

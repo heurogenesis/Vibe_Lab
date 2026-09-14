@@ -44,12 +44,15 @@ DATABASE_URL=postgresql://vibelab:vibelab_local@127.0.0.1:5432/vibelab
 
 ```powershell
 npm run db:migrate
+node node_modules/tsx/dist/cli.mjs server/seed-learning-content.ts
 npm run dev
 ```
 
 DB 마이그레이션은 기존 학습 데이터를 보존합니다. 연결 실패 시 파일 모드로 몰래 전환하지 않고 시작을 중단합니다. 운영 DB의 TLS 인증은 제공자의 CA/연결 설정을 사용하며 인증서 검증을 무조건 끄지 않습니다.
 
 **체험 파일과 PostgreSQL은 별도 저장소입니다.** 연결 전환 시 파일의 기존 기록을 자동 복사하지 않습니다. 현재 PostgreSQL은 한 워크스페이스의 생성 콘텐츠와 학습 기록을 JSONB에 보관하고, 행 잠금과 트랜잭션으로 동시 갱신을 직렬화합니다. 다중 사용자 운영 시에는 사용자·과제·제출·이벤트별 테이블과 소유권 조건을 분리하는 후속 마이그레이션이 필요합니다.
+
+신규 실습 54개와 DB 문제 은행의 구조·재실행·API 확장 방법은 [콘텐츠 안내](docs/CONTENT_BANK.md)를 참고하세요. 기존 과제는 보존하므로 새 맞춤 과제를 생성하면 변경된 문제를 확인할 수 있습니다.
 
 ## AI 연결
 

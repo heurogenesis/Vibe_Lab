@@ -1,3 +1,4 @@
+import { extendedExercise } from './extended-exercises.js';
 import type { Profile } from './schema.js';
 import { hasRoleSignal, resolveEnvironments, resolveGoalIntent, resolveLanguage, resolveOutputTarget,
   resolvePromptSkill, resolveRole, type Environment, type GoalIntentId, type Language, type OutputTarget,
@@ -11,6 +12,9 @@ export const personas = [
   { id: 'engineer', label: '실무 엔지니어' },
 ];
 export const themes = [
+  { id: 'median', label: '중앙값·이상값', concept: '정렬 · 강건한 요약' },
+  { id: 'trend', label: '시계열 이동평균', concept: '슬라이딩 윈도 · 결측' },
+  { id: 'normalize', label: '기준 구간 정규화', concept: '단위 변환 · 상대 위치' },
   { id: 'clean', label: '데이터 정제', concept: '함수 · 필터 · 평균' },
   { id: 'compare', label: '실험·조건 비교', concept: '그룹화 · 집계 · 데이터 구조' },
   { id: 'quality', label: '품질·기준 확인', concept: '조건식 · 경계값 · 비율' },
@@ -103,7 +107,7 @@ export function recommendation(profile: Profile) {
   const language = resolveLanguage(profile.languageId).id;
   const runnable = language === 'sql' || language === 'r';
   const suffix = runnable ? `:${language}` : '';
-  const pool: readonly string[] = runnable ? coreThemes : themes.map(t => t.id);
+  const pool: readonly string[] = runnable ? coreThemes : ['clean', 'compare', 'quality', 'async', 'median', 'trend', 'normalize'];
   const ranked = preferences.filter(t => pool.includes(t));
   const ids = ranked.slice(0, 3).map(t => `${primary.id}:${t}${suffix}`);
   for (const theme of pool) if (ids.length < 3 && !ids.includes(`${primary.id}:${theme}${suffix}`)) ids.push(`${primary.id}:${theme}${suffix}`);
@@ -216,6 +220,8 @@ export function getExercise(id: string): Exercise | undefined {
   const base = { id, version: CATALOG_VERSION, disciplineId, theme, sample: rows, sourceIds: d.id === 'life' ? ['palmer-penguins'] : [], referenceUrl: 'https://github.com/simple-statistics/simple-statistics', hints: ['입력과 반환 타입을 먼저 읽어 보세요.', '실패한 테스트의 기대값과 실제값을 비교하세요.'] };
   if (variant === 'sql') return sqlExercise(d, theme, base, rows, bounds);
   const tsBase = { ...base, language: 'typescript' as const };
+  const extended = extendedExercise(d, theme, tsBase);
+  if (extended) return extended;
   if (theme === 'clean') return { ...tsBase, title: `${d.subject}: 유효 데이터 평균`, objective: `${d.measurement}(${d.unit})에서 누락값과 범위 밖 값을 제외한 평균 함수를 만듭니다.`, contract: `solve(rows: Row[]): number | null. ${bounds}, 양 끝 포함. null과 유한하지 않은 값은 제외합니다. 남은 값이 없으면 null입니다. 이 범위는 학습용 계약이며 산업 안전 기준이 아닙니다.`, theory: '필터는 어떤 관측을 계산에 포함할지 결정합니다. 0과 음수도 계약 범위 안에서는 유효합니다. 평균의 분모는 전체 행 수가 아니라 유효한 관측 수입니다. 필터로 제거한 원자료를 잘못된 측정이라고 단정하지 마세요.', starter: `${rowType}\nfunction solve(rows: Row[]): number | null {\n  const values = rows\n    .map(row => row.value)\n    .filter((value): value is number => {\n      return /* BLANK 1: 유효 숫자와 범위 검사 */ false;\n    });\n  if (values.length === 0) return null;\n  return /* BLANK 2: 합계 / 개수 */ 0;\n}`, tests: [
     { name: '정상·누락·범위 초과 혼합', input: rows, expected: (d.min+d.max)/2, hint: 'null을 0으로 변환하지 말고, 범위 밖 값도 제외하세요.' },
     { name: '빈 데이터', input: [], expected: null, hint: '관측이 없다는 것은 평균이 0이라는 뜻이 아닙니다.' },

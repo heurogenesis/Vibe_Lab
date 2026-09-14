@@ -16,6 +16,10 @@ export interface Store { mode: 'postgresql' | 'demo-file'; read(): Promise<Learn
 // never here: this layer trusts the userId it is handed. See docs/MULTI_USER_DESIGN.md.
 export interface UserStore {
   mode: 'postgresql' | 'demo-file';
+  // Present only on the PostgreSQL implementation. server/auth.ts uses it to keep sessions in the same
+  // database as the learners, so a restart (or a second instance behind a load balancer) does not sign
+  // everyone out. The file store has no pool and falls back to the in-memory session store.
+  pool?: Pool;
   countUsers(): Promise<number>;
   findUser(userId: string): Promise<User | null>;
   isHandleTaken(handle: string): Promise<boolean>;
@@ -94,7 +98,7 @@ const toUser = (row: { id: string; handle: string; display_name: string; created
   ({ id: row.id, handle: row.handle, displayName: row.display_name, createdAt: new Date(row.created_at).toISOString(), passwordHash: row.password_hash || '' });
 export class PostgresUserStore implements UserStore {
   mode = 'postgresql' as const;
-  constructor(private pool: Pool) {}
+  constructor(readonly pool: Pool) {}
   async countUsers(): Promise<number> {
     const result = await this.pool.query('SELECT COUNT(*)::int AS count FROM learning_users');
     return result.rows[0]?.count ?? 0;

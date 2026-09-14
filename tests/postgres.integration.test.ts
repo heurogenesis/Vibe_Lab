@@ -10,6 +10,10 @@ it.runIf(!!process.env.TEST_DATABASE_URL)('real PostgreSQL: migration, rollback 
   try {
     const sql=await readFile(new URL('../db/001_initial.sql',import.meta.url),'utf8');
     await pool.query(sql);await pool.query(sql);
+    // Start from a known-empty directory. The handle is unique, so a row left behind by an earlier run
+    // would otherwise fail this run with a duplicate error rather than a real assertion.
+    await pool.query("DELETE FROM learning_workspaces WHERE id IN (SELECT id FROM learning_users WHERE handle='pgtester1')");
+    await pool.query("DELETE FROM learning_users WHERE handle='pgtester1'");
     const learner=await users.createUser({handle:'pgtester1',displayName:'PG',passwordHash:'not-used-here'});const store=users.forUser(learner.id);
     await store.update(state=>{state.profile={...defaultProfile,name:'postgres-test'};state.messages=[];});
     await expect(store.update(state=>{state.profile!.name='must roll back';throw new Error('intentional rollback');})).rejects.toThrow('intentional rollback');
