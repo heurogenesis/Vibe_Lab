@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import express from 'express';
 import session from 'express-session';
+import connectPgSimple from 'connect-pg-simple';
 import passport from 'passport';
 import { Strategy as LocalStrategy } from 'passport-local';
 import bcrypt from 'bcryptjs';
@@ -45,8 +46,16 @@ export function attachAuth(app: express.Express, users: UserStore) {
     try { done(null, (await users.findUser(id)) || false); }
     catch (error) { done(error as Error); }
   });
+  // Sessions live in PostgreSQL when it is the storage backend, so a restart or a second instance behind a
+  // load balancer keeps everyone signed in. The file-store (local demo) path stays on the in-memory store,
+  // which is fine for one process and avoids requiring a database just to try the app.
+  const sessionStore = users.pool
+    ? new (connectPgSimple(session))({ pool: users.pool, tableName: 'learning_sessions', createTableIfMissing: false })
+    : undefined;
+  if (!sessionStore) console.warn('Sessions are stored in memory: restarting the server signs everyone out.');
   app.use('/api', session({
     name: 'vibe.sid',
+    store: sessionStore,
     secret: sessionSecret(),
     resave: false,
     saveUninitialized: false,
