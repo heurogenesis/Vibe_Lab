@@ -856,3 +856,75 @@ prompts.chat 연동 조사 결과(브라우저 실측):
      종료해 노출을 닫을 것.
 사용자 승인 또는 결정이 필요한 사항: 없음.
 ```
+### 2026-09-14 (17차) 세션 영속화 · AWS 이전 준비 · GUI 재디자인
+
+```text
+날짜 / 담당 AI: 2026-09-14 / Claude Code
+작업 목적: 사용자 요청 - "서버 설정 마무리 / 로컬에서 기능 전부 테스트 가능하게 / 추후 AWS로
+  DB와 Server 이전하기 편하도록 / UI를 AI 활용 교육서비스 느낌으로". 이어서 "GUI도 재디자인 -
+  기능 버튼과 구성은 같아도 되지만 색상과 위치를 조정".
+브랜치: feature/mvp-savepoint-20260912
+추가한 의존성 (package.json - 사용자 승인함): connect-pg-simple, @types/connect-pg-simple.
+  npm audit 취약점 0건. 사용자가 "직접 구현" 대신 검증된 어댑터를 선택함.
+
+변경 파일:
+  server/store.ts - UserStore 인터페이스에 optional pool 노출. PostgresUserStore의 pool을
+    private -> readonly 로 변경. 파일 저장소에는 pool이 없어 자연스럽게 메모리 세션으로 떨어짐.
+  server/auth.ts - users.pool이 있으면 connect-pg-simple 세션 저장소 사용. 없으면 경고 로그 후 메모리.
+  server/index.ts - HOST 환경변수(기본 127.0.0.1 유지), RDS용 TLS 설정(DATABASE_CA_CERT /
+    DATABASE_SSL), 기동 로그에 sessions 표시.
+  db/001_initial.sql - learning_sessions 테이블 추가. createTableIfMissing:false 로 두어
+    DDL 권한이 없는 배포에서 조용히 메모리로 떨어지지 않고 크게 실패하도록 함.
+  tests/postgres.integration.test.ts - 픽스처 행을 먼저 삭제. 연속 실행 시 실패하던 문제 해결.
+  .env.example - SESSION_SECRET, PUBLIC_ORIGIN, HOST, DATABASE_SSL, DATABASE_CA_CERT 문서화.
+  src/Workspace.tsx, src/CodeLab.tsx, src/styles.css - 아래 UI 작업.
+
+AWS 이전 관점에서 해결된 것:
+  1) 세션이 앱 메모리가 아니라 DB에 있으므로 EC2 재기동·다중 인스턴스(ALB)에서 로그인이 유지됨.
+     이것이 단일 인스턴스 가정을 깨는 유일한 구조적 걸림돌이었음.
+  2) 바인딩 주소가 환경변수화됨. 로컬은 여전히 루프백이라 실수로 노출되지 않음.
+  3) RDS TLS 경로 확보. CA 없이 DATABASE_SSL=true만 쓰면 암호화는 되지만 검증은 안 된다는 점을
+     경고 로그로 명시함(조용히 안전한 척하지 않음).
+
+UI 작업 (두 단계):
+  (1) AI 존재감 - 튜터 패널에 그라디언트 헤더·아바타·상태 배지(AI 연결 여부를 사실대로 표시)·
+      현재 단계 칩·생각중 애니메이션 추가. 히어로에 오로라 질감. 프롬프트 킷에 동일 악센트.
+  (2) GUI 재디자인 - 팔레트를 초록에서 보라로 이동. 근거: 이 제품에서 학습자가 주목해야 할 것이
+      모델이므로 AI 악센트를 브랜드색으로 올리면 "브랜드색"과 "AI색"이 경쟁하던 구조가 사라짐.
+      초록은 "테스트 통과"라는 의미 하나만 담당하도록 남김(--pass).
+      사이드바를 다크로 전환해 학습 콘텐츠가 화면에서 가장 밝은 요소가 되게 함.
+      통계는 밑줄 숫자에서 카드로, 탭은 밑줄에서 pill 그룹으로.
+      토큰(--green/--lime/--line/--muted)을 재정의해 기존 시트 전체가 새 팔레트를 상속하게 하고,
+      하드코딩된 색만 개별 override 함.
+  시도했다가 되돌린 것: 단계 목록에 연결선을 그려 "학습 경로"처럼 보이게 하려 했으나, 불투명한
+    카드 뒤로 지나가 간격에서만 보여 의도가 아니라 결함처럼 읽혔음. 제거하고 주석에 근거를 남김.
+
+검증 명령과 실제 결과:
+  - npm run typecheck: 통과
+  - npm test (TEST_DATABASE_URL 설정): 189 passed. 연속 2회 실행해도 통과하는 것을 확인
+    (16차에서 기록한 "연속 실행 시 실패" 문제가 해결됨)
+  - npm run db:migrate: learning_sessions 테이블 생성 확인
+  - npm run build: 통과. CSS 25.42 -> 29.20 -> 최종 번들 생성 확인
+  - 세션 영속성 실측: 로그인(200) -> 서버 프로세스 강제 종료 -> 재기동 -> 같은 쿠키로
+    /api/auth/session 200 + 사용자 정보 반환. 기동 로그도 "sessions: postgresql".
+    psql로 learning_sessions 행 생성도 직접 확인.
+  - 중간에 잘못된 검증 1회: PUBLIC_ORIGIN이 설정된 상태에서 평문 HTTP(127.0.0.1)로 테스트해
+    쿠키가 발급되지 않아 401이 났음. 16차에서 고친 secure 쿠키 동작이 정상 작동한 것이지
+    세션 저장소 결함이 아니었음. PUBLIC_ORIGIN을 비우고 재검증함.
+  - UI: 계산된 스타일로 사이드바/탭/콘솔/단계마커/프롬프트킷 적용 확인. 가로 오버플로 없음
+    (body.scrollWidth == clientWidth). 사이드바 대비 #1c1834 배경 / #b3aad8 텍스트.
+    ※ 브라우저 창이 백그라운드일 때 스크린샷이 간헐적으로 빈 화면으로 캡처됨 - DOM 검사로
+      콘텐츠가 정상 배치됨을 확인했으나, 최종 육안 검수는 사용자가 직접 할 필요가 있음.
+
+남은 문제 / 다음 작업:
+  1) Cloudflare Quick Tunnel은 현재 내려가 있음. .env의 PUBLIC_ORIGIN도 비워둔 상태(로컬 모드).
+     다시 공개하려면 cloudflared 실행 -> 새 주소를 PUBLIC_ORIGIN에 넣고 서버 재시작.
+  2) 실제 CSRF 토큰 미도입. docs/MULTI_USER_DESIGN.md 5절의 비밀번호 재설정 경로,
+     사용자 기준 레이트 리밋도 그대로 남음.
+  3) PracticeLibrary가 180개 실습을 전부 노출하고 언어 필터가 없음(9차부터 누적).
+  4) AI 튜터는 여전히 규칙 기반. OPENAI_API_KEY 미연결이라 화면에 "RULES"로 표시됨.
+     실제 공급자·모델 확인 후 연결 필요(ROADMAP P1-02).
+  5) AWS 실제 배포(CLOUD-01~04)는 미착수. 이번 작업은 "이전이 가능한 상태"까지이고
+     EC2/RDS 생성·IaC·배포 자동화는 하지 않았음.
+사용자 승인 또는 결정이 필요한 사항: 없음.
+```
