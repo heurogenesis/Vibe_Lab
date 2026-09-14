@@ -141,3 +141,154 @@
   .tutor-context { margin: 14px 16px 0; }
   .welcome-card::before { width: 260px; height: 260px; }
 }
+
+/* ===========================================================================
+   GUI redesign
+   Same screens, same controls, new skin. The palette moves from the original
+   forest green to violet, because in this product the model is the thing the
+   learner is meant to notice: making the AI accent the brand colour removes
+   the earlier split where "brand" and "AI" were two competing colours.
+   Green survives in one job only - a passing test - where it means correct
+   rather than decorative.
+   Tokens are redefined rather than replaced at each call site, so the whole
+   sheet above inherits the new palette; only hardcoded colours are overridden.
+   =========================================================================== */
+:root {
+  --green: #5b3fd6;        /* primary actions, active states (name kept: used sheet-wide) */
+  --lime: #ffd166;         /* accent on dark surfaces */
+  --line: #e7e4f3;
+  --muted: #6d6889;
+  --ink: #211d3b;
+  --surface: #f8f7fc;
+  --ai: #7c5cf0; --ai-2: #9d86f5; --ai-soft: #f3f0fe; --ai-line: #e3dcfa;
+  --pass: #12996b;         /* a test that passed, and nothing else */
+  --shadow-sm: 0 1px 2px rgba(40,29,90,.06);
+  --shadow-md: 0 10px 28px rgba(40,29,90,.10);
+  color: var(--ink); background: var(--surface);
+}
+body { background: var(--surface); }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline-color: var(--ai); }
+
+/* Sidebar goes dark: it is chrome, and pushing it back makes the learning
+   content the brightest thing on screen. */
+.sidebar { background: #1c1834; border-right-color: #2b2550; color: #cdc7e8; }
+.brand { color: #fff; }
+.brand-icon { background: var(--ai-grad); color: #fff; }
+.beta { border-color: #3d3663; color: #a99fd4; }
+.workspace-label { color: #7d75a8; }
+.nav-item { color: #b3aad8; }
+.nav-item:hover { background: #272145; color: #fff; }
+.nav-item.active { background: var(--ai-grad); color: #fff; box-shadow: 0 4px 14px rgba(124,92,240,.35); }
+.sidebar-note { border-top-color: #2b2550; color: #9990c2; }
+.sidebar-note strong { color: #fff; }
+.sidebar-note > span, .mode-label { color: #8880b2; }
+.account { border-top-color: #2b2550; }
+.account strong { color: #fff; }
+.account small { color: #8880b2; }
+.avatar { background: var(--ai-grad); color: #fff; }
+.sidebar .text-button { color: #b3aad8; white-space: nowrap; font-size: 12px; }
+.sidebar .text-button:hover { color: #fff; }
+.account { gap: 10px; }
+.account > div { min-width: 0; }
+.account strong, .account small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Topbar and page furniture */
+.topbar { background: rgba(255,255,255,.72); backdrop-filter: blur(8px); border-bottom-color: var(--line); }
+.slash { color: #c3bcd9; }
+.top-chip { color: var(--ai); }
+.eyebrow { color: #8d86ab; }
+.accent { color: var(--ai); }
+.chapter-index { color: #d6d0ea; }
+footer { color: #8d86ab; border-top-color: var(--line); }
+
+/* Hero */
+.welcome-card { background: linear-gradient(135deg, #2d2456 0%, #4b32a8 55%, #6d4bd6 100%); }
+.welcome-card p { color: #d4cdf2; }
+.welcome-card .primary { background: var(--lime); color: #34240a; }
+.welcome-card .primary:hover:not(:disabled) { background: #ffdd8a; }
+.pill { border-color: rgba(255,255,255,.28); color: var(--lime); }
+.flow-visual > div { border-color: rgba(255,255,255,.18); }
+.flow-visual svg { color: #b9aeea; }
+.flow-visual small { color: #b6ade0; }
+.flow-visual .highlight { background: rgba(255,209,102,.10); border-color: rgba(255,209,102,.45); }
+.highlight svg, .highlight span { color: var(--lime); }
+.flow-line { border-left-color: #8d7ccb; }
+
+/* Buttons */
+.primary { background: var(--ai-grad); box-shadow: 0 2px 6px rgba(91,63,214,.30); }
+.primary:hover:not(:disabled) { background: linear-gradient(135deg, #6b4de0, #a892f7); box-shadow: 0 8px 20px rgba(91,63,214,.32); }
+.secondary { border-color: #ded9f1; color: var(--green); }
+.secondary:hover:not(:disabled) { background: var(--ai-soft); border-color: var(--ai); }
+.text-button { color: var(--green); }
+
+/* Stats become cards instead of underlined numbers: they are the learner's
+   scoreboard and were the flattest thing on the page. */
+.stats { gap: 16px; }
+.stats > div { border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 18px 20px; box-shadow: var(--shadow-sm); }
+.stats strong { color: var(--green); }
+
+/* Tabs become a pill group: clearer which surface you are on. */
+.tabs { gap: 6px; border-bottom: 0; background: #f0edfa; padding: 5px; border-radius: 11px; display: inline-flex; }
+.tabs button { padding: 10px 16px; border-radius: 8px; border-bottom: 0; }
+.tabs button.active { background: #fff; color: var(--green); box-shadow: var(--shadow-sm); }
+
+/* Cards, tags, inputs */
+.learning-card, .assignment-card, .repo-card, .panel { border-radius: 12px; }
+.learning-card:hover, .assignment-card:hover, .repo-card:hover { border-color: #c9bdf3; }
+.card-top { color: var(--ai); }
+.card-top > span, .card-bottom { color: #9992b8; }
+.card-bottom { border-top-color: #f0edf8; }
+.tag { background: var(--ai-soft); color: #5b3fd6; }
+.assignment-card:hover { background: #fdfcff; }
+.concept-list span { background: #fff; }
+.concept-list span:hover { border-color: var(--ai); color: var(--ai); }
+.recommendation summary { color: var(--ai); }
+input:not([type=radio]):not([type=checkbox]), textarea, select { background: #fbfaff; border-color: #e2ddf4; color: var(--ink); }
+input[type=radio], input[type=checkbox] { accent-color: var(--ai); }
+.choice.selected { background: var(--ai-soft); border-color: #b7a5f2; }
+.notice { background: var(--ai-soft); border-color: var(--ai-line); color: #4c3a94; }
+.profile-steps > button > span { background: #ece8f8; }
+.profile-steps > button.selected > span { background: var(--ai-grad); color: #fff; }
+progress { background: #ece8f8; accent-color: var(--ai); }
+progress::-webkit-progress-bar { background: #ece8f8; }
+progress::-webkit-progress-value { background: var(--ai-grad); }
+.empty-state { border-color: #ddd6f2; }
+.empty-state > svg, .empty-state h2 { color: var(--green); }
+.toast { background: #2d2456; }
+.search-form { border-color: #ded9f1; }
+
+/* Lesson surfaces */
+.step-list button.active { background: var(--ai-soft); border-color: #c3b4f5; color: var(--green); }
+.step-list button.active > span:first-child { background: var(--ai-grad); box-shadow: 0 0 0 4px #e9e3fb; }
+.step-list .done { background: var(--pass) !important; }
+.prompt-box { background: #f6f4fd; border-color: var(--ai-line); }
+.theory-box > a { color: var(--ai); }
+.experiment-box { border-left-color: var(--lime); }
+.check-list svg { color: var(--pass); }
+.objective { border-color: var(--line); }
+
+/* Quiz keeps result semantics: green only when it is actually right. */
+.quiz-result { background: #eafaf3; color: #0d7a55; }
+.quiz-feedback { background: #fff6e6; color: #7a5a1c; }
+.quiz-feedback.correct { background: #eafaf3; color: #0d7a55; }
+
+/* Code surfaces move to a neutral dark so the violet chrome stays readable. */
+.code-editor { background: #191631; color: #e6e2f7; border-color: #322b5c; }
+.code-editor:focus { outline-color: var(--ai); }
+.console-panel { background: #171430; color: #e6e2f7; border-left-color: var(--ai); }
+.console-panel > strong { color: #a99fd4; }
+.data-preview { background: #f3f1fb; }
+.test-results details { border-left-color: #d08a3c; background: #fff8ee; }
+.test-results .test-pass { border-color: var(--pass); background: #eefaf4; }
+.availability.ok { color: var(--pass); }
+
+/* Scrollbars follow the new palette. */
+.chat-messages::-webkit-scrollbar-thumb, .console-panel pre::-webkit-scrollbar-thumb, .readme::-webkit-scrollbar-thumb, .file-list::-webkit-scrollbar-thumb { background: #cdc5ea; }
+.readme { background: #f7f6fd; }
+.file-list svg { color: var(--ai); }
+.file-list li { border-bottom-color: #f0edf8; }
+
+@media (max-width: 800px) {
+  .sidebar { border-bottom-color: #2b2550; }
+  .tabs { display: flex; }
+}
