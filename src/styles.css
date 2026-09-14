@@ -35,3 +35,39 @@
 .prompt-output > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
 .prompt-output > div:first-child strong { font-size: 13px; }
 .prompt-output pre { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 15px; margin: 10px 0; max-height: 380px; overflow: auto; font: 12px/1.75 Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Design refresh: depth on cards, friendlier motion, AI areas visually called out */
+:root { --shadow-sm: 0 1px 2px rgba(32,54,47,.05); --shadow-md: 0 6px 20px rgba(32,54,47,.08); --ai: #6a4fd6; --ai-soft: #f2eefb; }
+.panel, .learning-card, .assignment-card, .repo-card, .welcome-card { box-shadow: var(--shadow-sm); transition: box-shadow .18s ease, transform .18s ease, border-color .18s ease; }
+.learning-card:hover, .assignment-card:hover, .repo-card:hover { box-shadow: var(--shadow-md); transform: translateY(-3px); border-color: #c3d6bd; }
+.primary, .secondary { transition: box-shadow .15s ease, transform .1s ease, background .15s ease; }
+.primary { box-shadow: 0 1px 2px rgba(37,78,64,.28); }
+.primary:hover:not(:disabled) { box-shadow: 0 6px 16px rgba(37,78,64,.25); transform: translateY(-1px); }
+.primary:active:not(:disabled) { transform: translateY(0); box-shadow: 0 1px 2px rgba(37,78,64,.28); }
+.secondary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.nav-item { transition: background .15s ease, color .15s ease; }
+.step-list button, .choice { transition: background .15s ease, border-color .15s ease; }
+
+/* AI tutor + prompt-kit read as one distinct "AI 학습" surface across the app */
+.tutor { background: linear-gradient(180deg, #fbfaff, #f4f1fc); border-color: #e2dbf5; box-shadow: var(--shadow-sm); }
+.tutor-icon { background: linear-gradient(135deg, var(--ai), #8f7ae8); color: #fff; }
+.tutor-header h3 { color: var(--ai); }
+.chat-message.user { background: var(--ai); }
+.chat-message.user small { color: #ded7f7; }
+.quick-questions button:hover { border-color: var(--ai); color: var(--ai); }
+.ai-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 700; letter-spacing: .6px; color: var(--ai); background: var(--ai-soft); border-radius: 20px; padding: 4px 9px; margin-left: 8px; vertical-align: middle; }
+.prompt-kit { border-left: 3px solid var(--ai); background: linear-gradient(135deg, #f8f6fd, #f1eefb); }
+.prompt-kit > strong { color: var(--ai); }
+.prompt-kit .secondary:hover:not(:disabled) { border-color: var(--ai); color: var(--ai); }
+
+/* Scrollable panels feel tidier with a thin, on-brand scrollbar (WebKit/Blink) */
+.chat-messages::-webkit-scrollbar, .console-panel pre::-webkit-scrollbar, .readme::-webkit-scrollbar, .file-list::-webkit-scrollbar { width: 7px; height: 7px; }
+.chat-messages::-webkit-scrollbar-thumb, .console-panel pre::-webkit-scrollbar-thumb, .readme::-webkit-scrollbar-thumb, .file-list::-webkit-scrollbar-thumb { background: #c7d6c1; border-radius: 10px; }
+
+/* Test result cards read faster at a glance: clearer pass/fail chip look */
+.test-results details { border-radius: 10px; }
+.test-results details > summary { font-weight: 600; }
+.test-results .test-fail { border-left-color: #c17a3a; }
+
+.copyright { margin-left: auto; color: #9aa79d; }
+@media (max-width: 800px) { .copyright { width: 100%; margin-left: 0; } }

@@ -48,5 +48,5 @@ export default function App() {
   {page==='library' && <PracticeLibrary profile={state.profile} history={state.practiceHistory || []}/>}
   {page==='github' && <Repositories onError={setError} authenticated={!!health?.githubAuthenticated}/>}
   </>}
-  <footer>호기심을 출발점으로, 이해를 도착점으로.<a href="https://github.com/microsoft/Web-Dev-For-Beginners" target="_blank" rel="noreferrer">오픈소스로 배우기 <ArrowUpRight size={14}/></a></footer></div></main>{notice && <div className="toast" role="status">{notice}<button aria-label="알림 닫기" onClick={()=>setNotice('')}><X size={16}/></button></div>}</div>;
+  <footer><span>호기심을 출발점으로, 이해를 도착점으로.</span><a href="https://github.com/microsoft/Web-Dev-For-Beginners" target="_blank" rel="noreferrer">오픈소스로 배우기 <ArrowUpRight size={14}/></a><span className="copyright">© {new Date().getFullYear()} LeeTaewoo</span></footer></div></main>{notice && <div className="toast" role="status">{notice}<button aria-label="알림 닫기" onClick={()=>setNotice('')}><X size={16}/></button></div>}</div>;
 }

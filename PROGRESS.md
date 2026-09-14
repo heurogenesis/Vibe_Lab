@@ -729,3 +729,35 @@ prompts.chat 연동 조사 결과(브라우저 실측):
   사용자가 선택하는 대로 위 세 항목 중 하나.
 사용자 승인 또는 결정이 필요한 사항: 없음. (커밋 전 사용자에게 diff 요약을 보고함)
 ```
+
+### 2026-09-14 (14차) 푸터 저작권 표기 + AI 학습 영역 시각적 강조 디자인 보강
+
+```text
+날짜 / 담당 AI: 2026-09-14 / Claude Code
+작업 목적: 사용자 요청 - "웹 하단의 Copyright LeeTaewoo를 넣어주고 웹디자인을 좀 더 사용자
+  친화적이고 ai 학습에 알맞은 디자인으로 수정". 같은 요청에 포함된 "PostgreSQL 설정 · Cloudflare
+  배포"는 계정 생성·인프라 provider 선택이 필요한 별도 결정 사항이라 분리하고 사용자에게 확인 질문을
+  먼저 보냄(AGENTS의 설정/배포 변경 사전 승인 규칙, ROADMAP CLOUD-01 결정 항목과 동일한 성격).
+브랜치: feature/mvp-savepoint-20260912
+변경 파일:
+  src/App.tsx - footer에 `© {연도} LeeTaewoo` 저작권 span 추가(기존 문구·링크는 유지)
+  src/CodeLab.tsx - LLM 프롬프트 킷 제목 옆에 "AI" 배지 추가(이 기능이 AI 학습 지원 기능임을 시각적으로 표시)
+  src/styles.css - 기존 --green/--lime 브랜드는 그대로 두고, 카드(learning/assignment/repo-card,
+    panel)에 그림자·호버 시 상승 트랜지션 추가. AI 튜터 패널·프롬프트 킷만 별도의 --ai(보라 계열)
+    악센트로 구분해 "AI가 개입하는 영역"이 한눈에 보이게 함. 버튼 호버/액티브 상태, 스크롤바,
+    테스트 결과 카드 모서리를 다듬음. 폰트나 기존 --green/--lime 브랜드 색은 바꾸지 않음
+    (COOP/COEP 상태에서 폰트 로딩 방식을 건드리는 것은 별도 승인 대상이라 범위에서 제외).
+검증 명령과 실제 결과:
+  - npm run typecheck: 통과
+  - npm test: 188 passed | 1 skipped (회귀 없음)
+  - 브라우저 실측(rlangtest1 계정, R 과제): getComputedStyle로 확인 -
+    .tutor 배경 그라디언트·보라 보더, .tutor-icon 보라 그라디언트, .prompt-kit 왼쪽 보라 보더,
+    .ai-badge 보라 텍스트, .primary 그림자, .assignment-card 그림자·트랜지션이 모두 적용됨을 확인.
+    페이지 텍스트에서 푸터 "© 2026 LeeTaewoo" 노출 확인. 콘솔 에러 없음(로그인 전 401은 기존에도
+    있던 정상 동작).
+  - 참고: 이번 검증 중 Browser 창이 백그라운드(hidden)라 스크린샷이 반복 타임아웃돼 get_page_text/
+    javascript_tool의 getComputedStyle로 대체 검증함. 스크린샷 기반 육안 검수는 사용자가 직접 열어
+    확인 필요.
+남은 문제 / 다음 작업: PostgreSQL 실제 연결과 배포(Cloudflare 등) 방식은 사용자 답변 대기 중.
+사용자 승인 또는 결정이 필요한 사항: 없음(디자인 톤은 재량 진행, 마음에 안 들면 추가 조정 가능).
+```
